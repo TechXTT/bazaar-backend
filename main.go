@@ -6,9 +6,10 @@ import (
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 
 	// Services
-	_ "github.com/TechXTT/bazaar-backend/services/cache"
 	_ "github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/web"
+	_ "github.com/joho/godotenv/autoload"
+
 )
 
 func main() {
