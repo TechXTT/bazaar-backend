@@ -10,6 +10,8 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/web"
 	_ "github.com/joho/godotenv/autoload"
 
+	// Modules
+	_ "github.com/TechXTT/bazaar-backend/modules/users"
 )
 
 func main() {
