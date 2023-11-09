@@ -101,7 +101,5 @@ func (j *jwks) ValidateToken(token string) (string, error) {
 		return "", err
 	}
 
-	log.Printf("Claims: %v", claims)
-
 	return claims.ID, nil
 }
