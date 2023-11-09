@@ -6,6 +6,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/TechXTT/bazaar-backend/services/web"
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
@@ -28,13 +29,13 @@ type (
 		CreateUser(u *Users) error
 
 		// UpdateUser updates a user
-		UpdateUser(token string, u *Users) error
+		UpdateUser(id string, u *Users) error
 
 		// DeleteUser deletes a user
-		DeleteUser(token string) error
+		DeleteUser(id string) error
 
 		// GetMe returns the current user using JWKS token
-		GetMe(token string) (*Users, error)
+		GetMe(id string) (*Users, error)
 
 		// LoginUser logs in a user
 		LoginUser(email string, password string) (string, error)
@@ -80,10 +81,16 @@ func init() {
 	// Register routes during router build
 	web.HookBuildRouter.Listen(func(e hooks.Event[*mux.Router]) {
 		h := do.MustInvoke[Handler](do.DefaultInjector)
+
+		middleware := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
+		authenticatedHandler := e.Msg.NewRoute().Subrouter()
+		authenticatedHandler.Use(middleware.AuthMiddleware)
+
+		authenticatedHandler.HandleFunc("/users", h.Update).Methods(http.MethodPut)
+		authenticatedHandler.HandleFunc("/users", h.Delete).Methods(http.MethodDelete)
+		authenticatedHandler.HandleFunc("/users/me", h.Me).Methods(http.MethodGet)
+
 		e.Msg.HandleFunc("/users", h.Create).Methods(http.MethodPost)
-		e.Msg.HandleFunc("/users", h.Update).Methods(http.MethodPut)
-		e.Msg.HandleFunc("/users", h.Delete).Methods(http.MethodDelete)
-		e.Msg.HandleFunc("/users/me", h.Me).Methods(http.MethodGet)
 		e.Msg.HandleFunc("/users/login", h.Login).Methods(http.MethodPost)
 	})
 }
