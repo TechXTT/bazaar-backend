@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
@@ -32,11 +33,28 @@ func init() {
 }
 
 func NewDB(i *do.Injector) (DB, error) {
-	db := &db{
+	dbCfg := &db{
 		cfg: do.MustInvoke[config.Config](i),
 	}
 
-	return db, nil
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
+			dbCfg.cfg.GetDB().POSTGRES_HOST,
+			dbCfg.cfg.GetDB().POSTGRES_PORT,
+			dbCfg.cfg.GetDB().POSTGRES_USER,
+			dbCfg.cfg.GetDB().POSTGRES_PASSWORD,
+			dbCfg.cfg.GetDB().POSTGRES_DB,
+		), PreferSimpleProtocol: true}), &gorm.Config{})
+	if err != nil {
+		panic(err)
+	}
+
+	if !db.Migrator().HasTable(&Users{}) {
+		db.Migrator().CreateTable(&Users{})
+		log.Println("Created users table")
+	}
+
+	return dbCfg, nil
 }
 
 func (d *db) DB() *gorm.DB {
