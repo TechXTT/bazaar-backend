@@ -14,7 +14,6 @@ import (
 func NewUsersService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	jwks := do.MustInvoke[jwt.Jwks](i)
-	// db.DB().AutoMigrate(&Users{})
 
 	return &usersService{
 		db:   db,
@@ -43,11 +42,7 @@ func (u *usersService) CreateUser(user *Users) error {
 	return nil
 }
 
-func (u *usersService) UpdateUser(token string, user *Users) error {
-	id, err := u.jwks.ValidateToken(token)
-	if err != nil {
-		return err
-	}
+func (u *usersService) UpdateUser(id string, user *Users) error {
 
 	if err := u.update(uuid.FromStringOrNil(id), user); err != nil {
 		return err
@@ -56,8 +51,8 @@ func (u *usersService) UpdateUser(token string, user *Users) error {
 	return nil
 }
 
-func (u *usersService) DeleteUser(token string) error {
-	user, err := u.GetMe(token)
+func (u *usersService) DeleteUser(id string) error {
+	user, err := u.GetMe(id)
 	if err != nil {
 		return err
 	}
@@ -69,12 +64,7 @@ func (u *usersService) DeleteUser(token string) error {
 	return nil
 }
 
-func (u *usersService) GetMe(token string) (*Users, error) {
-	id, err := u.jwks.ValidateToken(token)
-	if err != nil {
-		return nil, err
-	}
-
+func (u *usersService) GetMe(id string) (*Users, error) {
 	return u.GetUser(uuid.FromStringOrNil(id))
 }
 
