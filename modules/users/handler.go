@@ -31,13 +31,7 @@ func (u *usersHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
-	if token == "" {
-		http.Error(w, "missing Authorization header", http.StatusBadRequest)
-		return
-	}
-
-	token = token[7:]
+	user_id := r.Header.Get("user_id")
 
 	user := &Users{}
 	if err := json.NewDecoder(r.Body).Decode(user); err != nil {
@@ -45,7 +39,7 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := u.svc.UpdateUser(token, user); err != nil {
+	if err := u.svc.UpdateUser(user_id, user); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -55,15 +49,9 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
-	if token == "" {
-		http.Error(w, "missing Authorization header", http.StatusBadRequest)
-		return
-	}
+	user_id := r.Header.Get("user_id")
 
-	token = token[7:]
-
-	if err := u.svc.DeleteUser(token); err != nil {
+	if err := u.svc.DeleteUser(user_id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -73,15 +61,9 @@ func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("Authorization")
-	if token == "" {
-		http.Error(w, "missing Authorization header", http.StatusBadRequest)
-		return
-	}
+	user_id := r.Header.Get("user_id")
 
-	token = token[7:]
-
-	user, err := u.svc.GetMe(token)
+	user, err := u.svc.GetMe(user_id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
