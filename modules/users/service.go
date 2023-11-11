@@ -2,7 +2,6 @@ package users
 
 import (
 	"errors"
-	"log"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
@@ -107,8 +106,6 @@ func (u *usersService) save(user *Users) error {
 	if result.RowsAffected == 1 {
 		return errors.New("user already exists")
 	}
-
-	log.Printf("user: %+v", existingUser)
 
 	if user.Role != Admin && user.Role != Customer && user.Role != Seller {
 		return errors.New("invalid role")
