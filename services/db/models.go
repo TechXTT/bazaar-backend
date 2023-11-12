@@ -25,6 +25,19 @@ type Users struct {
 	Role          RoleType `gorm:"not null, type:ENUM('admin', 'customer', 'seller');default:'customer'"`
 }
 
+type Stores struct {
+	gorm.Model
+	ID      uuid.UUID `gorm:"primaryKey"`
+	Name    string    `gorm:"not null" json:"name"`
+	OwnerID uuid.UUID `gorm:"not null" json:"owner_id"`
+	Owner   Users     `gorm:"foreignKey:OwnerID"`
+}
+
+func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
+	s.ID, err = uuid.NewV4()
+	return err
+}
+
 func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
 	u.ID, err = uuid.NewV4()
 	return err

@@ -53,6 +53,10 @@ func NewDB(i *do.Injector) (DB, error) {
 		db.Migrator().CreateTable(&Users{})
 		log.Println("Created users table")
 	}
+	if !db.Migrator().HasTable(&Stores{}) {
+		db.Migrator().CreateTable(&Stores{})
+		log.Println("Created stores table")
+	}
 
 	return dbCfg, nil
 }
