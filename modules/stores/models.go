@@ -27,11 +27,23 @@ type Users struct {
 
 type Stores struct {
 	gorm.Model
-	ID      uuid.UUID `gorm:"primaryKey"`
-	Name    string    `gorm:"unique, not null" json:"name"`
-	OwnerID uuid.UUID `gorm:"not null" json:"owner_id"`
-	Owner   Users     `gorm:"foreignKey:OwnerID"`
-	// TODO: Add products
+	ID       uuid.UUID  `gorm:"primaryKey"`
+	Name     string     `gorm:"unique, not null" json:"name"`
+	OwnerID  uuid.UUID  `gorm:"not null" json:"owner_id"`
+	Owner    Users      `gorm:"foreignKey:OwnerID"`
+	Products []Products `gorm:"foreignKey:StoreID"`
+}
+
+type Products struct {
+	gorm.Model
+	ID       uuid.UUID `gorm:"primaryKey"`
+	Name     string    `gorm:"not null" json:"name"`
+	ImageURL string    `gorm:"not null" json:"image_url"`
+	Price    float64   `gorm:"not null" json:"price"`
+	// TODO: Define options for products
+	Description string    `gorm:"not null" json:"description"`
+	StoreID     uuid.UUID `gorm:"not null" json:"store_id"`
+	Store       Stores    `gorm:"foreignKey:StoreID"`
 }
 
 func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
