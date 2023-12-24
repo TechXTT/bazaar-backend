@@ -1,4 +1,4 @@
-package db
+package stores
 
 import (
 	"github.com/gofrs/uuid/v5"
@@ -28,17 +28,13 @@ type Users struct {
 type Stores struct {
 	gorm.Model
 	ID      uuid.UUID `gorm:"primaryKey"`
-	Name    string    `gorm:"not null" json:"name"`
+	Name    string    `gorm:"unique, not null" json:"name"`
 	OwnerID uuid.UUID `gorm:"not null" json:"owner_id"`
 	Owner   Users     `gorm:"foreignKey:OwnerID"`
+	// TODO: Add products
 }
 
 func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
 	s.ID, err = uuid.NewV4()
-	return err
-}
-
-func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
-	u.ID, err = uuid.NewV4()
 	return err
 }

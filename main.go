@@ -11,6 +11,7 @@ import (
 	_ "github.com/joho/godotenv/autoload"
 
 	// Modules
+	_ "github.com/TechXTT/bazaar-backend/modules/stores"
 	_ "github.com/TechXTT/bazaar-backend/modules/users"
 )
 
