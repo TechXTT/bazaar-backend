@@ -8,7 +8,6 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/TechXTT/bazaar-backend/services/web"
-	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
 	"github.com/samber/do"
@@ -16,15 +15,12 @@ import (
 
 type (
 	Credentials struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email    string
+		Password string
 	}
 
 	// Service is the users service interface
 	Service interface {
-		// GetUser returns a user by id
-		GetUser(id uuid.UUID) (*Users, error)
-
 		// CreateUser creates a new user
 		CreateUser(u *Users) error
 
@@ -39,6 +35,9 @@ type (
 
 		// LoginUser logs in a user
 		LoginUser(email string, password string) (string, error)
+
+		// VerifyUser verifies a user
+		VerifyUser(token string) error
 	}
 
 	// Handler provides the users handlers
@@ -58,6 +57,9 @@ type (
 
 		// Login handles a request to login a user
 		Login(w http.ResponseWriter, r *http.Request)
+
+		// Verify handles a request to verify a user
+		Verify(w http.ResponseWriter, r *http.Request)
 	}
 
 	usersService struct {
@@ -92,5 +94,6 @@ func init() {
 
 		e.Msg.HandleFunc("/users", h.Create).Methods(http.MethodPost)
 		e.Msg.HandleFunc("/users/login", h.Login).Methods(http.MethodPost)
+		e.Msg.HandleFunc("/users/verify-email", h.Verify).Methods(http.MethodGet)
 	})
 }

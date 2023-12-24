@@ -69,6 +69,10 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.Password = ""
+	user.WalletAddress = ""
+	user.Address = ""
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(user)
 }
@@ -88,4 +92,17 @@ func (u *usersHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	vars := r.URL.Query()
+
+	token := vars.Get("token")
+
+	if err := u.svc.VerifyUser(token); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, "http://localhost:3000", http.StatusSeeOther)
 }
