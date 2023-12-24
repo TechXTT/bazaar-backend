@@ -33,6 +33,18 @@ type Stores struct {
 	Owner   Users     `gorm:"foreignKey:OwnerID"`
 }
 
+type Products struct {
+	gorm.Model
+	ID       uuid.UUID `gorm:"primaryKey"`
+	Name     string    `gorm:"not null" json:"name"`
+	ImageURL string    `gorm:"not null" json:"image_url"`
+	Price    float64   `gorm:"not null" json:"price"`
+	// TODO: Define options for products
+	Description string    `gorm:"not null" json:"description"`
+	StoreID     uuid.UUID `gorm:"not null" json:"store_id"`
+	Store       Stores    `gorm:"foreignKey:StoreID"`
+}
+
 func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
 	s.ID, err = uuid.NewV4()
 	return err

@@ -7,6 +7,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
+	"gorm.io/gorm/clause"
 )
 
 // NewStoresService creates a new users service
@@ -21,18 +22,16 @@ func NewStoresService(i *do.Injector) (Service, error) {
 }
 
 func (s *storesService) GetStores() ([]Stores, error) {
-	stores := s.load()
+  stores := s.loads()
 
 	return stores, nil
 }
 
 func (s *storesService) GetStore(id string) (*Stores, error) {
-	stores := s.load()
+	store := s.load(uuid.FromStringOrNil(id))
 
-	for _, store := range stores {
-		if store.ID == uuid.FromStringOrNil(id) {
-			return &store, nil
-		}
+	if store.ID != uuid.Nil {
+		return &store, nil
 	}
 
 	return nil, errors.New("store not found")
@@ -65,12 +64,17 @@ func (s *storesService) DeleteStore(userId string, id string) error {
 	return nil
 }
 
-func (s *storesService) load() []Stores {
+func (s *storesService) loads() []Stores {
 	var stores []Stores
-	s.db.DB().Joins("Owner").Find(&stores)
+	s.db.DB().Find(&stores)
 	return stores
 }
 
+func (s *storesService) load(storeId uuid.UUID) Stores {
+	var store Stores
+	s.db.DB().Preload(clause.Associations).Where("id = ?", storeId).First(&store)
+	return store
+}
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
 	db := s.db.DB()
 
