@@ -16,13 +16,14 @@ const (
 type Users struct {
 	gorm.Model
 	ID            uuid.UUID `gorm:"primaryKey"`
-	FirstName     string    `gorm:"not null" json:"first_name"`
-	LastName      string    `gorm:"not null" json:"last_name"`
+	FirstName     string    `gorm:"not null"`
+	LastName      string    `gorm:"not null"`
 	Address       string
-	Email         string   `gorm:"not null, unique"`
-	Password      string   `gorm:"not null"`
-	WalletAddress string   `gorm:"not null, unique" json:"wallet_address"`
-	Role          RoleType `gorm:"not null, type:ENUM('admin', 'customer', 'seller');default:'customer'"`
+	Email         string `gorm:"not null, unique"`
+	EmailVerified bool   `gorm:"default:false"`
+	Password      string `gorm:"not null"`
+	WalletAddress string
+	Role          RoleType `gorm:"not null, type:ENUM('admin', 'customer', 'seller')"`
 }
 
 func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
