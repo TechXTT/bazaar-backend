@@ -7,7 +7,6 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
-	"gorm.io/gorm/clause"
 )
 
 // NewStoresService creates a new users service
@@ -72,7 +71,7 @@ func (s *storesService) loads() []Stores {
 
 func (s *storesService) load(storeId uuid.UUID) Stores {
 	var store Stores
-	s.db.DB().Preload(clause.Associations).Where("id = ?", storeId).First(&store)
+	s.db.DB().Preload("Owner").Where("id = ?", storeId).First(&store)
 	return store
 }
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
