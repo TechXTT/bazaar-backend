@@ -22,7 +22,7 @@ func NewStoresService(i *do.Injector) (Service, error) {
 }
 
 func (s *storesService) GetStores() ([]Stores, error) {
-	stores := s.loads()
+  stores := s.loads()
 
 	return stores, nil
 }
@@ -75,7 +75,6 @@ func (s *storesService) load(storeId uuid.UUID) Stores {
 	s.db.DB().Preload(clause.Associations).Where("id = ?", storeId).First(&store)
 	return store
 }
-
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
 	db := s.db.DB()
 
