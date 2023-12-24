@@ -7,6 +7,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
+	"gorm.io/gorm/clause"
 )
 
 // NewProductsService creates a new users service
@@ -63,6 +64,25 @@ func (p *productsService) DeleteProduct(userId string, id string) error {
 	}
 
 	return nil
+}
+
+func (p *productsService) GetProductsFromStore(storeId string, cursor string, limit int) ([]Products, error) {
+	var products []Products
+	db := p.db.DB()
+
+	if cursor == "" {
+		db = db.Where("store_id = ?", storeId).Limit(limit).Order("created_at desc")
+	} else {
+		db = db.Where("store_id = ?", storeId).Where("created_at < ?", cursor).Limit(limit).Order("created_at desc")
+	}
+
+	db.Preload(clause.Associations).Find(&products)
+
+	if len(products) == 0 {
+		return nil, errors.New("no products found")
+	}
+
+	return products, nil
 }
 
 func (p *productsService) load() []Products {

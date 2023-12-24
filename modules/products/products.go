@@ -31,6 +31,9 @@ type (
 		// DeleteProduct deletes a product
 		DeleteProduct(userId string, id string) error
 
+		// GetProductsFromStore returns paginated products from a store
+		GetProductsFromStore(storeId string, cursor string, limit int) ([]Products, error)
+
 		// TODO: Add methods for categories and orders
 	}
 
@@ -51,6 +54,9 @@ type (
 
 		// Delete handles a request to delete a product
 		Delete(w http.ResponseWriter, r *http.Request)
+
+		// GetFromStore handles a request to get products from a store using pagination and store id
+		GetFromStore(w http.ResponseWriter, r *http.Request)
 	}
 
 	productsService struct {
@@ -80,6 +86,7 @@ func init() {
 
 		e.Msg.HandleFunc("/products", h.Gets).Methods("GET")
 		e.Msg.HandleFunc("/products/{id}", h.Get).Methods("GET")
+		e.Msg.HandleFunc("/products/store/{id}", h.GetFromStore).Methods("GET")
 
 		authenticatedHandler.HandleFunc("/products", h.Create).Methods("POST")
 		authenticatedHandler.HandleFunc("/products/{id}", h.Update).Methods("PUT")
