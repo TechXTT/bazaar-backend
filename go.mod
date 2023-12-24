@@ -12,7 +12,10 @@ require (
 	gorm.io/gorm v1.25.5
 )
 
-require github.com/stretchr/testify v1.8.4 // indirect
+require (
+	github.com/rs/cors v1.10.1 // indirect
+	github.com/stretchr/testify v1.8.4 // indirect
+)
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.0.0

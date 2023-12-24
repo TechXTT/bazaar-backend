@@ -1,8 +1,10 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
@@ -34,6 +36,12 @@ type (
 		ReadTimeout  time.Duration
 		WriteTimeout time.Duration
 		IdleTimeout  time.Duration
+
+		AllowedOrigins   []string
+		AllowedMethods   []string
+		AllowedHeaders   []string
+		ExposedHeaders   []string
+		AllowCredentials bool
 	}
 
 	DBConfig struct {
@@ -70,12 +78,28 @@ func NewConfig(i *do.Injector) (Config, error) {
 	writeTimeout, _ := time.ParseDuration(os.Getenv("HTTP_WRITE_TIMEOUT"))
 	idleTimeout, _ := time.ParseDuration(os.Getenv("HTTP_IDLE_TIMEOUT"))
 
+	allowedOrigins := os.Getenv("HTTP_ALLOWED_ORIGINS")
+	allowedOriginsList := strings.Split(allowedOrigins, ",")
+	log.Print(allowedOriginsList)
+	allowedMethods := os.Getenv("HTTP_ALLOWED_METHODS")
+	allowedMethodsList := strings.Split(allowedMethods, ",")
+	allowedHeaders := os.Getenv("HTTP_ALLOWED_HEADERS")
+	allowedHeadersList := strings.Split(allowedHeaders, ",")
+	exposedHeaders := os.Getenv("HTTP_EXPOSED_HEADERS")
+	exposedHeadersList := strings.Split(exposedHeaders, ",")
+	allowCredentials, _ := strconv.ParseBool(os.Getenv("HTTP_ALLOW_CREDENTIALS"))
+
 	cfg.HTTP = HTTPConfig{
-		Hostname:     os.Getenv("HTTP_HOSTNAME"),
-		Port:         port,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  idleTimeout,
+		Hostname:         os.Getenv("HTTP_HOSTNAME"),
+		Port:             port,
+		ReadTimeout:      readTimeout,
+		WriteTimeout:     writeTimeout,
+		IdleTimeout:      idleTimeout,
+		AllowedOrigins:   allowedOriginsList,
+		AllowedMethods:   allowedMethodsList,
+		AllowedHeaders:   allowedHeadersList,
+		ExposedHeaders:   exposedHeadersList,
+		AllowCredentials: allowCredentials,
 	}
 
 	port, _ = strconv.Atoi(os.Getenv("POSTGRES_PORT"))

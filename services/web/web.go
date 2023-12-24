@@ -8,6 +8,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
+	"github.com/rs/cors"
 	"github.com/samber/do"
 )
 
@@ -32,7 +33,7 @@ func init() {
 
 func NewWeb(i *do.Injector) (Web, error) {
 	w := &web{
-		handler: mux.NewRouter(),
+		handler: mux.NewRouter().PathPrefix("/api").Subrouter(),
 		cfg:     do.MustInvoke[config.Config](i),
 	}
 	w.buildRouter()
@@ -41,7 +42,6 @@ func NewWeb(i *do.Injector) (Web, error) {
 }
 
 func (w *web) buildRouter() {
-	w.handler.Use(mux.CORSMethodMiddleware(w.handler))
 
 	w.handler.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -54,9 +54,19 @@ func (w *web) buildRouter() {
 func (w *web) Start() error {
 	httpCfg := w.cfg.GetHTTP()
 
+	c := cors.New(cors.Options{
+		AllowedOrigins:   w.cfg.GetHTTP().AllowedOrigins,
+		AllowedMethods:   w.cfg.GetHTTP().AllowedMethods,
+		AllowedHeaders:   w.cfg.GetHTTP().AllowedHeaders,
+		AllowCredentials: w.cfg.GetHTTP().AllowCredentials,
+		ExposedHeaders:   w.cfg.GetHTTP().ExposedHeaders,
+	})
+
+	handler := c.Handler(w.handler)
+
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", httpCfg.Hostname, httpCfg.Port),
-		Handler:      w.handler,
+		Handler:      handler,
 		ReadTimeout:  httpCfg.ReadTimeout,
 		WriteTimeout: httpCfg.WriteTimeout,
 		IdleTimeout:  httpCfg.IdleTimeout,
