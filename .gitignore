@@ -24,3 +24,6 @@ go.work
 .env
 private.pem
 public.pem
+
+# binary file
+bin/
