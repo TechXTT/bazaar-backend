@@ -10,6 +10,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+type OrderResponse struct {
+	ID           string `json:"id"`
+	OwnerAddress string `json:"owner_address"`
+}
+
 // NewProductsService creates a new users service
 func NewProductsService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
@@ -83,6 +88,30 @@ func (p *productsService) GetProductsFromStore(storeId string, cursor string, li
 	}
 
 	return products, nil
+}
+
+func (p *productsService) CreateOrders(userId string, orders *[]Orders) ([]OrderResponse, error) {
+	db := p.db.DB()
+
+	var orderResponses []OrderResponse
+
+	for _, order := range *orders {
+		order.BuyerID = uuid.FromStringOrNil(userId)
+		product, err := p.GetProduct(order.ProductID.String())
+		if err != nil {
+			return nil, err
+		}
+		order.Total = float64(order.Quantity) * product.Price
+		if err := db.Create(&order).Error; err != nil {
+			return nil, err
+		}
+		var owner Users
+		db.Where("id = ?", product.Store.OwnerID).First(&owner)
+
+		orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
+	}
+
+	return orderResponses, nil
 }
 
 func (p *productsService) load() []Products {

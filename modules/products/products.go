@@ -34,6 +34,9 @@ type (
 		// GetProductsFromStore returns paginated products from a store
 		GetProductsFromStore(storeId string, cursor string, limit int) ([]Products, error)
 
+		// CreateOrders returns order_ids for given products
+		CreateOrders(userId string, orders *[]Orders) ([]OrderResponse, error)
+
 		// TODO: Add methods for categories and orders
 	}
 
@@ -57,6 +60,9 @@ type (
 
 		// GetFromStore handles a request to get products from a store using pagination and store id
 		GetFromStore(w http.ResponseWriter, r *http.Request)
+
+		// CreateOrder handles a request to create a new order
+		CreateOrder(w http.ResponseWriter, r *http.Request)
 	}
 
 	productsService struct {
@@ -91,5 +97,7 @@ func init() {
 		authenticatedHandler.HandleFunc("/products", h.Create).Methods("POST")
 		authenticatedHandler.HandleFunc("/products/{id}", h.Update).Methods("PUT")
 		authenticatedHandler.HandleFunc("/products/{id}", h.Delete).Methods("DELETE")
+
+		authenticatedHandler.HandleFunc("/products/orders", h.CreateOrder).Methods("POST")
 	})
 }
