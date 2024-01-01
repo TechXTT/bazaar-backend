@@ -135,3 +135,29 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	userId := r.Header.Get("user_id")
+
+	type OrderRequest struct {
+		Data []Orders `json:"data"`
+	}
+
+	// body is data:  []Orders
+	orders := &OrderRequest{}
+	if err := json.NewDecoder(r.Body).Decode(orders); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Assign the returned values from s.svc.CreateOrders to separate variables
+	orderIds, err := s.svc.CreateOrders(userId, &orders.Data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(orderIds)
+}
