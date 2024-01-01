@@ -21,7 +21,7 @@ func NewStoresService(i *do.Injector) (Service, error) {
 }
 
 func (s *storesService) GetStores() ([]Stores, error) {
-  stores := s.loads()
+	stores := s.loads()
 
 	return stores, nil
 }
@@ -76,6 +76,12 @@ func (s *storesService) load(storeId uuid.UUID) Stores {
 }
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
 	db := s.db.DB()
+
+	user := Users{}
+	db.Where("id = ?", userId).First(&user)
+	if user.WalletAddress == "" {
+		return errors.New("user has not set wallet address")
+	}
 
 	existingStore := Stores{}
 	result := db.Where("name = ?", store.Name).First(&existingStore)
