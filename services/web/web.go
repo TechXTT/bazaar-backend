@@ -65,7 +65,7 @@ func (w *web) Start() error {
 	handler := c.Handler(w.handler)
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", httpCfg.Hostname, httpCfg.Port),
+		Addr:         fmt.Sprintf(":%d", httpCfg.Port),
 		Handler:      handler,
 		ReadTimeout:  httpCfg.ReadTimeout,
 		WriteTimeout: httpCfg.WriteTimeout,
