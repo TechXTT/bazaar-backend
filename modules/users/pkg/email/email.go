@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"log"
 	"net/smtp"
 	"os"
 	"path/filepath"
@@ -15,8 +14,6 @@ var smtp_password = os.Getenv("SMTP_PASSWORD")
 func SendEmailVerification(reciever string, recieverName string, verificationLink string) error {
 
 	auth := smtp.PlainAuth("", "marogo142005@gmail.com", smtp_password, "smtp.gmail.com")
-
-	log.Println("Auth: ", auth)
 
 	filePrefix, _ := filepath.Abs("./modules/users/pkg/email")
 

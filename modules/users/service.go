@@ -1,13 +1,18 @@
 package users
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/TechXTT/bazaar-backend/modules/users/pkg/email"
 	"github.com/TechXTT/bazaar-backend/modules/users/pkg/passwords"
+	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
 )
@@ -16,10 +21,12 @@ import (
 func NewUsersService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	jwks := do.MustInvoke[jwt.Jwks](i)
+	cfg := do.MustInvoke[config.Config](i)
 
 	return &usersService{
 		db:   db,
 		jwks: jwks,
+		cfg:  cfg,
 	}, nil
 }
 
@@ -33,6 +40,12 @@ func (u *usersService) CreateUser(user *Users) error {
 }
 
 func (u *usersService) UpdateUser(id string, user *Users) error {
+
+	if user.WalletAddress != "" {
+		if err := u.validateAddress(user.WalletAddress); err != nil {
+			return err
+		}
+	}
 
 	if err := u.update(uuid.FromStringOrNil(id), user); err != nil {
 		return err
@@ -196,4 +209,29 @@ func (u *usersService) generateEmailVerificationLink(id uuid.UUID) (string, erro
 	}
 
 	return fmt.Sprintf("http://localhost:8000/api/users/verify-email?token=%s", token), nil
+}
+
+func (u *usersService) validateAddress(address string) error {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+
+	if !re.MatchString(address) {
+		return errors.New("invalid address")
+	}
+
+	client, err := ethclient.Dial(u.cfg.GetWs().ETH_URL)
+	if err != nil {
+		return err
+	}
+
+	commonAddress := common.HexToAddress(address)
+	bytecode, err := client.CodeAt(context.Background(), commonAddress, nil)
+	if err != nil {
+		return err
+	}
+
+	if len(bytecode) > 0 {
+		return errors.New("invalid address")
+	}
+
+	return nil
 }

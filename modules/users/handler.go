@@ -70,7 +70,6 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Password = ""
-	user.WalletAddress = ""
 	user.Address = ""
 
 	w.Header().Set("Content-Type", "application/json")
