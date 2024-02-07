@@ -1,12 +1,14 @@
 package products
 
 import (
+	"mime/multipart"
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
+	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/TechXTT/bazaar-backend/services/web"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
@@ -23,7 +25,7 @@ type (
 		GetProduct(id string) (*Products, error)
 
 		// CreateProduct creates a new product
-		CreateProduct(userId string, p *Products) error
+		CreateProduct(userId string, p *Products) (string, error)
 
 		// UpdateProduct updates a product
 		UpdateProduct(userId string, id string, p *Products) error
@@ -39,6 +41,9 @@ type (
 
 		// GetOrders returns all orders
 		GetOrders(userId string) ([]Orders, error)
+
+		// SaveFile saves a file to the object storage
+		SaveFile(file multipart.File, filepath string) (string, error)
 
 		// TODO: Add methods for categories and orders
 	}
@@ -72,8 +77,9 @@ type (
 	}
 
 	productsService struct {
-		db   db.DB
-		jwks jwt.Jwks
+		db       db.DB
+		jwks     jwt.Jwks
+		s3spaces s3spaces.S3Spaces
 	}
 
 	productsHandler struct {

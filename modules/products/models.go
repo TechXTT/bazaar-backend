@@ -46,11 +46,12 @@ type Stores struct {
 
 type Products struct {
 	gorm.Model
-	ID       uuid.UUID `gorm:"primaryKey"`
-	Name     string    `gorm:"not null"`
-	ImageURL string    `gorm:"not null"`
-	Price    float64   `gorm:"not null"`
-	Unit     string    `gorm:"not null"`
+	ID    uuid.UUID `gorm:"primaryKey"`
+	Name  string    `gorm:"not null"`
+	Price float64   `gorm:"not null"`
+	Unit  string    `gorm:"not null"`
+
+	ImageURL string
 	// TODO: Define options for products
 	Description string    `gorm:"not null"`
 	StoreID     uuid.UUID `gorm:"not null"`

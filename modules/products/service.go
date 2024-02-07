@@ -7,6 +7,7 @@ import (
 
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
+	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
 	"gorm.io/gorm/clause"
@@ -21,10 +22,12 @@ type OrderResponse struct {
 func NewProductsService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	jwks := do.MustInvoke[jwt.Jwks](i)
+	s3spaces := do.MustInvoke[s3spaces.S3Spaces](i)
 
 	return &productsService{
-		db:   db,
-		jwks: jwks,
+		db:       db,
+		jwks:     jwks,
+		s3spaces: s3spaces,
 	}, nil
 }
 
@@ -46,13 +49,14 @@ func (p *productsService) GetProduct(id string) (*Products, error) {
 	return nil, errors.New("product not found")
 }
 
-func (p *productsService) CreateProduct(userId string, product *Products) error {
+func (p *productsService) CreateProduct(userId string, product *Products) (string, error) {
 
-	if err := p.save(uuid.FromStringOrNil(userId), product); err != nil {
-		return err
+	id, err := p.save(uuid.FromStringOrNil(userId), product)
+	if err != nil {
+		return "", err
 	}
 
-	return nil
+	return id, nil
 }
 
 func (p *productsService) UpdateProduct(userId string, id string, product *Products) error {
@@ -158,31 +162,31 @@ func (p *productsService) load() []Products {
 	return products
 }
 
-func (p *productsService) save(userId uuid.UUID, product *Products) error {
+func (p *productsService) save(userId uuid.UUID, product *Products) (string, error) {
 	db := p.db.DB()
 
 	existingProduct := Products{}
 	result := db.Where("name = ?", product.Name).First(&existingProduct)
 	if result.RowsAffected == 1 {
-		return errors.New("product already exists")
+		return "", errors.New("product already exists")
 	}
 
 	existingStore := Stores{}
 	result = db.Where("id = ?", product.StoreID).First(&existingStore)
 	if result.RowsAffected == 0 {
-		return errors.New("store not found")
+		return "", errors.New("store not found")
 	}
 
 	if existingStore.OwnerID != userId {
-		return errors.New("unauthorized")
+		return "", errors.New("unauthorized")
 	}
 
 	result = db.Create(&product)
 	if result.Error != nil {
-		return result.Error
+		return "", result.Error
 	}
 
-	return nil
+	return product.ID.String(), nil
 }
 
 func (p *productsService) update(userId uuid.UUID, id string, product *Products) error {

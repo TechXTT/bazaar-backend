@@ -65,12 +65,43 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userId := r.Header.Get("user_id")
 
 	product := &Products{}
-	if err := json.NewDecoder(r.Body).Decode(product); err != nil {
+
+	// read from form data
+	file, _, err := r.FormFile("image")
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	defer file.Close()
 
-	if err := s.svc.CreateProduct(userId, product); err != nil {
+	// read from form data
+	product.Name = r.FormValue("name")
+	product.Description = r.FormValue("description")
+	product.Price, err = strconv.ParseFloat(r.FormValue("price"), 64)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	product.Unit = "ETH" // TODO: future implementation to allow other coins
+	product.StoreID = uuid.FromStringOrNil(r.FormValue("storeId"))
+
+	id, err := s.svc.CreateProduct(userId, product)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// save file to object storage
+	filepath := "products/" + r.FormValue("storeId") + "/" + id
+	imageURL, err := s.svc.SaveFile(file, filepath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	product.ImageURL = imageURL
+
+	if err := s.svc.UpdateProduct(userId, id, product); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
