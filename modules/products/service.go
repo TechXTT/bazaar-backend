@@ -2,6 +2,7 @@ package products
 
 import (
 	"errors"
+	"mime/multipart"
 	"strings"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
@@ -136,6 +137,19 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 	}
 
 	return orderResponses, nil
+}
+
+func (p *productsService) GetOrders(userId string) ([]Orders, error) {
+	db := p.db.DB()
+
+	var orders []Orders
+	db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders)
+
+	return orders, nil
+}
+
+func (p *productsService) SaveFile(file multipart.File, filepath string) (string, error) {
+	return p.s3spaces.SaveFile(file, filepath)
 }
 
 func (p *productsService) load() []Products {
