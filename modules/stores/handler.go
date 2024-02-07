@@ -98,3 +98,20 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
+
+func (s *storesHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	userId := r.Header.Get("user_id")
+
+	stores, err := s.svc.GetUserStores(userId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(stores); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}

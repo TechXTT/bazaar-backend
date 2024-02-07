@@ -63,6 +63,12 @@ func (s *storesService) DeleteStore(userId string, id string) error {
 	return nil
 }
 
+func (s *storesService) GetUserStores(userId string) ([]Stores, error) {
+	var stores []Stores
+	s.db.DB().Where("owner_id = ?", userId).Find(&stores)
+	return stores, nil
+}
+
 func (s *storesService) loads() []Stores {
 	var stores []Stores
 	s.db.DB().Find(&stores)
