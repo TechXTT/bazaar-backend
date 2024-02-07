@@ -21,6 +21,8 @@ type (
 		GetApp() AppConfig
 
 		GetJWT() JWTConfig
+
+		GetWs() WsConfig
 	}
 
 	Base struct {
@@ -28,6 +30,7 @@ type (
 		DB   DBConfig
 		App  AppConfig
 		JWT  JWTConfig
+		Ws       WsConfig
 	}
 
 	HTTPConfig struct {
@@ -61,6 +64,11 @@ type (
 		JwksUri    string
 		PrivateKey string
 		PublicKey  string
+	}
+
+	WsConfig struct {
+		ETH_URL         string
+		ContractAddress string
 	}
 )
 
@@ -125,6 +133,11 @@ func NewConfig(i *do.Injector) (Config, error) {
 		PublicKey:  os.Getenv("PUBLIC_KEY"),
 	}
 
+	cfg.Ws = WsConfig{
+		ETH_URL:         os.Getenv("ETH_URL"),
+		ContractAddress: os.Getenv("CONTRACT_ADDRESS"),
+	}
+
 	return &cfg, nil
 
 }
@@ -143,4 +156,8 @@ func (c *Base) GetApp() AppConfig {
 
 func (c *Base) GetJWT() JWTConfig {
 	return c.JWT
+}
+
+func (c *Base) GetWs() WsConfig {
+	return c.Ws
 }
