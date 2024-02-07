@@ -9,6 +9,19 @@ import (
 	"github.com/samber/do"
 )
 
+type (
+	DataRequest struct {
+		CreatedAt    time.Time
+		ProductID    uuid.UUID
+		Quantity     int
+		BuyerAddress string
+	}
+
+	OrderRequest struct {
+		Data []DataRequest `json:"data"`
+	}
+)
+
 // NewProductsHandler creates a new users handler
 func NewProductsHandler(i *do.Injector) (Handler, error) {
 	return &productsHandler{
@@ -139,10 +152,6 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	userId := r.Header.Get("user_id")
 
-	type OrderRequest struct {
-		Data []Orders `json:"data"`
-	}
-
 	// body is data:  []Orders
 	orders := &OrderRequest{}
 	if err := json.NewDecoder(r.Body).Decode(orders); err != nil {
@@ -151,7 +160,7 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Assign the returned values from s.svc.CreateOrders to separate variables
-	orderIds, err := s.svc.CreateOrders(userId, &orders.Data)
+	orderIds, err := s.svc.CreateOrders(userId, orders.Data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

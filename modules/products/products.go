@@ -35,7 +35,7 @@ type (
 		GetProductsFromStore(storeId string, cursor string, limit int) ([]Products, error)
 
 		// CreateOrders returns order_ids for given products
-		CreateOrders(userId string, orders *[]Orders) ([]OrderResponse, error)
+		CreateOrders(userId string, orders []DataRequest) ([]OrderResponse, error)
 
 		// TODO: Add methods for categories and orders
 	}
