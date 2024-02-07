@@ -4,9 +4,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
+)
+
+type (
+	DataRequest struct {
+		CreatedAt    time.Time
+		ProductID    uuid.UUID
+		Quantity     int
+		BuyerAddress string
+	}
+
+	OrderRequest struct {
+		Data []DataRequest `json:"data"`
+	}
 )
 
 // NewProductsHandler creates a new users handler
@@ -170,10 +185,6 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	userId := r.Header.Get("user_id")
 
-	type OrderRequest struct {
-		Data []Orders `json:"data"`
-	}
-
 	// body is data:  []Orders
 	orders := &OrderRequest{}
 	if err := json.NewDecoder(r.Body).Decode(orders); err != nil {
@@ -182,7 +193,7 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Assign the returned values from s.svc.CreateOrders to separate variables
-	orderIds, err := s.svc.CreateOrders(userId, &orders.Data)
+	orderIds, err := s.svc.CreateOrders(userId, orders.Data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -191,4 +202,17 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(orderIds)
+}
+
+func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
+	userId := r.Header.Get("user_id")
+
+	orders, err := s.svc.GetOrders(userId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(orders)
 }

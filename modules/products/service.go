@@ -3,6 +3,7 @@ package products
 import (
 	"errors"
 	"mime/multipart"
+	"strings"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
@@ -95,28 +96,60 @@ func (p *productsService) GetProductsFromStore(storeId string, cursor string, li
 	return products, nil
 }
 
-func (p *productsService) CreateOrders(userId string, orders *[]Orders) ([]OrderResponse, error) {
+func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) ([]OrderResponse, error) {
 	db := p.db.DB()
 
+	orders := []Orders{}
+	for _, orderData := range ordersData {
+		order := Orders{
+			ProductID: orderData.ProductID,
+			Quantity:  orderData.Quantity,
+		}
+		order.CreatedAt = orderData.CreatedAt
+		orders = append(orders, order)
+	}
 	var orderResponses []OrderResponse
 
-	for _, order := range *orders {
+	for i, order := range orders {
 		order.BuyerID = uuid.FromStringOrNil(userId)
 		product, err := p.GetProduct(order.ProductID.String())
 		if err != nil {
 			return nil, err
 		}
+
+		var owner Users
+		db.Where("id = ?", product.Store.OwnerID).First(&owner)
+
+		if owner.WalletAddress == "" {
+			return nil, errors.New("owner wallet address not found")
+		}
+
+		if strings.EqualFold(owner.WalletAddress, ordersData[i].BuyerAddress) {
+			return nil, errors.New("owner and buyer cannot be the same")
+		}
+
+		if owner.ID == order.BuyerID {
+			return nil, errors.New("owner and buyer cannot be the same")
+		}
+
 		order.Total = float64(order.Quantity) * product.Price
 		if err := db.Create(&order).Error; err != nil {
 			return nil, err
 		}
-		var owner Users
-		db.Where("id = ?", product.Store.OwnerID).First(&owner)
 
 		orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
 	}
 
 	return orderResponses, nil
+}
+
+func (p *productsService) GetOrders(userId string) ([]Orders, error) {
+	db := p.db.DB()
+
+	var orders []Orders
+	db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders)
+
+	return orders, nil
 }
 
 func (p *productsService) SaveFile(file multipart.File, filepath string) (string, error) {

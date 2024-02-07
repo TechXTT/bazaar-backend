@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
+	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
@@ -65,6 +66,7 @@ type (
 	usersService struct {
 		db   db.DB
 		jwks jwt.Jwks
+		cfg  config.Config
 	}
 
 	usersHandler struct {

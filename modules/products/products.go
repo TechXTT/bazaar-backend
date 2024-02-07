@@ -37,7 +37,10 @@ type (
 		GetProductsFromStore(storeId string, cursor string, limit int) ([]Products, error)
 
 		// CreateOrders returns order_ids for given products
-		CreateOrders(userId string, orders *[]Orders) ([]OrderResponse, error)
+		CreateOrders(userId string, orders []DataRequest) ([]OrderResponse, error)
+
+		// GetOrders returns all orders
+		GetOrders(userId string) ([]Orders, error)
 
 		// SaveFile saves a file to the object storage
 		SaveFile(file multipart.File, filepath string) (string, error)
@@ -68,6 +71,9 @@ type (
 
 		// CreateOrder handles a request to create a new order
 		CreateOrder(w http.ResponseWriter, r *http.Request)
+
+		// GetOrders handles a request to get all orders
+		GetOrders(w http.ResponseWriter, r *http.Request)
 	}
 
 	productsService struct {
@@ -105,5 +111,6 @@ func init() {
 		authenticatedHandler.HandleFunc("/products/{id}", h.Delete).Methods("DELETE")
 
 		authenticatedHandler.HandleFunc("/products/orders", h.CreateOrder).Methods("POST")
+		authenticatedHandler.HandleFunc("/products/orders", h.GetOrders).Methods("GET")
 	})
 }

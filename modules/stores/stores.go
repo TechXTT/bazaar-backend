@@ -31,6 +31,9 @@ type (
 		// DeleteStore deletes a store
 		DeleteStore(userId string, id string) error
 
+		// GetUserStores returns all stores for a user
+		GetUserStores(userId string) ([]Stores, error)
+
 		// TODO: Add methods for products and categories
 	}
 
@@ -51,6 +54,9 @@ type (
 
 		// Delete handles a request to delete a store
 		Delete(w http.ResponseWriter, r *http.Request)
+
+		// GetUser handles a request to get a user's stores
+		GetUser(w http.ResponseWriter, r *http.Request)
 	}
 
 	storesService struct {
@@ -77,6 +83,8 @@ func init() {
 		middleware := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
 		authenticatedHandler := e.Msg.NewRoute().Subrouter()
 		authenticatedHandler.Use(middleware.AuthMiddleware)
+
+		authenticatedHandler.HandleFunc("/stores/user", h.GetUser).Methods("GET")
 
 		e.Msg.HandleFunc("/stores/{id}", h.Get).Methods("GET")
 		e.Msg.HandleFunc("/stores", h.Gets).Methods("GET")
