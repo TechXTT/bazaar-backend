@@ -66,6 +66,7 @@ type Orders struct {
 	ProductID uuid.UUID   `gorm:"not null"`
 	Product   Products    `gorm:"foreignKey:ProductID"`
 	BuyerID   uuid.UUID   `gorm:"not null"`
+	Buyer     Users       `gorm:"foreignKey:BuyerID"`
 	Quantity  int         `gorm:"not null"`
 	Total     float64     `gorm:"not null"`
 	Status    OrderStatus `gorm:"not null, type:ENUM('pending', 'completed', 'cancelled'), default:'pending'"`

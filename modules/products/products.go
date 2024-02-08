@@ -40,7 +40,7 @@ type (
 		CreateOrders(userId string, orders []DataRequest) ([]OrderResponse, error)
 
 		// GetOrders returns all orders
-		GetOrders(userId string) ([]Orders, error)
+		GetOrders(userId string, filter string) ([]Orders, error)
 
 		// SaveFile saves a file to the object storage
 		SaveFile(file multipart.File, filepath string) (string, error)

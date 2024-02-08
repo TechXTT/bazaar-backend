@@ -206,8 +206,9 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 
 func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	userId := r.Header.Get("user_id")
+	filter := r.URL.Query().Get("filter")
 
-	orders, err := s.svc.GetOrders(userId)
+	orders, err := s.svc.GetOrders(userId, filter)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

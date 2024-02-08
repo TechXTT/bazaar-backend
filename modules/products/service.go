@@ -143,11 +143,17 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 	return orderResponses, nil
 }
 
-func (p *productsService) GetOrders(userId string) ([]Orders, error) {
+func (p *productsService) GetOrders(userId string, filter string) ([]Orders, error) {
 	db := p.db.DB()
 
 	var orders []Orders
-	db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders)
+	if filter == "receiving" {
+		db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders)
+	} else if filter == "sending" {
+		db.Preload("Product").Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId).Find(&orders)
+	} else {
+		db.Preload("Product").Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId).Find(&orders)
+	}
 
 	return orders, nil
 }
