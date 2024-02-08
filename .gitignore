@@ -24,4 +24,4 @@ go.work
 .env
 private.pem
 public.pem
-*.c3cfg
+*.s3cfg

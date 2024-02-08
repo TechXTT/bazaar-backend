@@ -102,15 +102,17 @@ func init() {
 		authenticatedHandler := e.Msg.NewRoute().Subrouter()
 		authenticatedHandler.Use(middleware.AuthMiddleware)
 
+		authenticatedHandler.HandleFunc("/products/orders", h.GetOrders).Methods("GET")
+
 		e.Msg.HandleFunc("/products", h.Gets).Methods("GET")
-		e.Msg.HandleFunc("/products/{id}", h.Get).Methods("GET")
 		e.Msg.HandleFunc("/products/store/{id}", h.GetFromStore).Methods("GET")
+		e.Msg.HandleFunc("/products/{id}", h.Get).Methods("GET")
 
 		authenticatedHandler.HandleFunc("/products", h.Create).Methods("POST")
 		authenticatedHandler.HandleFunc("/products/{id}", h.Update).Methods("PUT")
 		authenticatedHandler.HandleFunc("/products/{id}", h.Delete).Methods("DELETE")
 
 		authenticatedHandler.HandleFunc("/products/orders", h.CreateOrder).Methods("POST")
-		authenticatedHandler.HandleFunc("/products/orders", h.GetOrders).Methods("GET")
+
 	})
 }
