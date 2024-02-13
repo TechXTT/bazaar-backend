@@ -168,6 +168,15 @@ func (p *productsService) load() []Products {
 	return products
 }
 
+func (p *productsService) GetOrder(id string) (*Orders, error) {
+	db := p.db.DB()
+
+	order := Orders{}
+	db.Preload("Product").Where("id = ?", id).First(&order)
+
+	return &order, nil
+}
+
 func (p *productsService) save(userId uuid.UUID, product *Products) (string, error) {
 	db := p.db.DB()
 
