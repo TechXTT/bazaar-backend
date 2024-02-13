@@ -69,6 +69,15 @@ type Orders struct {
 	// TODO: add tracking number and shipping address for orders, and txHash for payment
 }
 
+// type Messages struct {
+// 	gorm.Model
+// 	ID        uuid.UUID `gorm:"primaryKey"`
+// 	DisputeID uuid.UUID `gorm:"not null"`
+// 	Dispute   Disputes  `gorm:"foreignKey:DisputeID"`
+// 	SenderID  uuid.UUID `gorm:"not null"`
+// 	Sender    Users     `gorm:"foreignKey:SenderID"`
+// 	Message   string    `gorm:"not null"`
+// }
 
 type Disputes struct {
 	gorm.Model
