@@ -45,6 +45,9 @@ type (
 		// SaveFile saves a file to the object storage
 		SaveFile(file multipart.File, filepath string) (string, error)
 
+		// GetOrder returns an order by id
+		GetOrder(id string) (*Orders, error)
+
 		// TODO: Add methods for categories and orders
 	}
 
@@ -74,6 +77,9 @@ type (
 
 		// GetOrders handles a request to get all orders
 		GetOrders(w http.ResponseWriter, r *http.Request)
+
+		// GetOrder handles a request to get an order
+		GetOrder(w http.ResponseWriter, r *http.Request)
 	}
 
 	productsService struct {
@@ -103,6 +109,7 @@ func init() {
 		authenticatedHandler.Use(middleware.AuthMiddleware)
 
 		authenticatedHandler.HandleFunc("/products/orders", h.GetOrders).Methods("GET")
+		e.Msg.HandleFunc(("/products/orders/{id}"), h.GetOrder).Methods("GET")
 
 		e.Msg.HandleFunc("/products", h.Gets).Methods("GET")
 		e.Msg.HandleFunc("/products/store/{id}", h.GetFromStore).Methods("GET")

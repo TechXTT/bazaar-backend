@@ -217,3 +217,17 @@ func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(orders)
 }
+
+func (s *productsHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	orderId := vars["id"]
+
+	order, err := s.svc.GetOrder(orderId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(order)
+}
