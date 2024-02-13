@@ -68,6 +68,14 @@ func NewDB(i *do.Injector) (DB, error) {
 		log.Println("Created orders table")
 	}
 
+	if !db.Migrator().HasTable(&Disputes{}) {
+		db.Migrator().CreateTable(&Disputes{})
+		log.Println("Created disputes table")
+	}
+	if !db.Migrator().HasTable(&DisputeImages{}) {
+		db.Migrator().CreateTable(&DisputeImages{})
+		log.Println("Created dispute_images table")
+	}
 
 	return dbCfg, nil
 }

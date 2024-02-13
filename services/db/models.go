@@ -55,11 +55,6 @@ type Products struct {
 	Store       Stores    `gorm:"foreignKey:StoreID"`
 }
 
-func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
-	s.ID, err = uuid.NewV4()
-	return err
-}
-
 type Orders struct {
 	gorm.Model
 	ID        uuid.UUID   `gorm:"primaryKey"`
@@ -72,4 +67,24 @@ type Orders struct {
 	Status    OrderStatus `gorm:"not null, type:ENUM('pending', 'completed', 'cancelled'), default:'pending'"`
 	TxHash    string
 	// TODO: add tracking number and shipping address for orders, and txHash for payment
+}
+
+
+type Disputes struct {
+	gorm.Model
+	ID       uuid.UUID `gorm:"not null"`
+	OrderID  uuid.UUID `gorm:"not null"`
+	Order    Orders    `gorm:"foreignKey:OrderID"`
+	Dispute  string    `gorm:"not null"`
+	Resolved bool      `gorm:"default:false"`
+	// Messages []Messages      `gorm:"foreignKey:DisputeID"`
+	Images []DisputeImages `gorm:"foreignKey:DisputeID"`
+}
+
+type DisputeImages struct {
+	gorm.Model
+	ID        uuid.UUID `gorm:"primaryKey"`
+	Dispute   Disputes  `gorm:"foreignKey:DisputeID"`
+	DisputeID uuid.UUID `gorm:"not null"`
+	Image     string    `gorm:"not null"`
 }
