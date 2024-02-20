@@ -5,14 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type RoleType string
-
-const (
-	Admin    RoleType = "admin"
-	Customer RoleType = "customer"
-	Seller   RoleType = "seller"
-)
-
 type Users struct {
 	gorm.Model
 	ID            uuid.UUID `gorm:"primaryKey"`
@@ -23,7 +15,6 @@ type Users struct {
 	EmailVerified bool   `gorm:"default:false"`
 	Password      string `gorm:"not null"`
 	WalletAddress string
-	Role          RoleType `gorm:"not null, type:ENUM('admin', 'customer', 'seller')"`
 }
 
 func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {

@@ -153,14 +153,6 @@ func (u *usersService) save(user *Users) error {
 		return errors.New("user already exists")
 	}
 
-	if user.Role != Admin && user.Role != Customer && user.Role != Seller {
-		if user.Role == "" {
-			user.Role = Customer
-		} else {
-			return errors.New("invalid role")
-		}
-	}
-
 	hashedPassword, err := passwords.HashPassword(user.Password)
 	if err != nil {
 		return err
@@ -202,7 +194,7 @@ func (u *usersService) delete(user *Users) error {
 func (u *usersService) update(id uuid.UUID, user *Users) error {
 	db := u.db.DB()
 
-	result := db.Model(&user).Omit("email", "password", "role").Where("id = ?", id).Updates(user)
+	result := db.Model(&user).Omit("email", "password").Where("id = ?", id).Updates(user)
 	if result.Error != nil {
 		return result.Error
 	}

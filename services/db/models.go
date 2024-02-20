@@ -5,14 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type RoleType string
-
-const (
-	Admin    RoleType = "admin"
-	Customer RoleType = "customer"
-	Seller   RoleType = "seller"
-)
-
 type OrderStatus string
 
 const (
@@ -31,7 +23,6 @@ type Users struct {
 	EmailVerified bool   `gorm:"default:false"`
 	Password      string `gorm:"not null"`
 	WalletAddress string
-	Role          RoleType `gorm:"not null, type:ENUM('admin', 'customer', 'seller')"`
 }
 
 type Stores struct {
