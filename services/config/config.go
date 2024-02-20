@@ -23,8 +23,8 @@ type (
 		GetJWT() JWTConfig
 
 		GetWs() WsConfig
-    
-    GetS3Spaces() S3SpacesConfig
+
+		GetS3Spaces() S3SpacesConfig
 	}
 
 	Base struct {
@@ -33,7 +33,7 @@ type (
 		App      AppConfig
 		JWT      JWTConfig
 		Ws       WsConfig
-    S3Spaces S3SpacesConfig
+		S3Spaces S3SpacesConfig
 	}
 
 	HTTPConfig struct {
@@ -73,12 +73,12 @@ type (
 		ETH_URL         string
 		ContractAddress string
 	}
-  
-  S3SpacesConfig struct {
+
+	S3SpacesConfig struct {
 		SpacesKey    string
 		SpacesSecret string
 		SpacesName   string
-  }
+	}
 )
 
 func init() {
@@ -141,12 +141,12 @@ func NewConfig(i *do.Injector) (Config, error) {
 		PrivateKey: os.Getenv("PRIVATE_KEY"),
 		PublicKey:  os.Getenv("PUBLIC_KEY"),
 	}
-  
-  cfg.Ws = WsConfig{
+
+	cfg.Ws = WsConfig{
 		ETH_URL:         os.Getenv("ETH_URL"),
 		ContractAddress: os.Getenv("CONTRACT_ADDRESS"),
-  }
-  
+	}
+
 	cfg.S3Spaces = S3SpacesConfig{
 		SpacesKey:    os.Getenv("SPACES_KEY"),
 		SpacesSecret: os.Getenv("SPACES_SECRET"),
@@ -180,4 +180,3 @@ func (c *Base) GetWs() WsConfig {
 func (c *Base) GetS3Spaces() S3SpacesConfig {
 	return c.S3Spaces
 }
-
