@@ -68,35 +68,30 @@ func (u *usersService) DeleteUser(id string) error {
 }
 
 func (u *usersService) GetMe(id string) (*Users, error) {
-	users := u.load()
+	user := u.load(uuid.FromStringOrNil(id))
 
-	for _, user := range users {
-		if user.ID.String() == id {
-			return &user, nil
-		}
+	if user.ID != uuid.Nil {
+		return &user, nil
 	}
 
 	return nil, errors.New("user not found")
 }
 
 func (u *usersService) LoginUser(email string, password string) (string, error) {
-	users := u.load()
+	user := u.loadByEmail(email)
 
-	for _, user := range users {
+	if user.ID != uuid.Nil {
 		err := passwords.ComparePassword(user.Password, password)
 		if err != nil {
 			return "", err
 		}
 
-		if user.Email == email {
-
-			token, err := u.jwks.GenerateToken(user.ID.String())
-			if err != nil {
-				return "", err
-			}
-
-			return token, nil
+		token, err := u.jwks.GenerateToken(user.ID.String())
+		if err != nil {
+			return "", err
 		}
+
+		return token, nil
 	}
 
 	return "", errors.New("user not found")
@@ -108,32 +103,45 @@ func (u *usersService) VerifyUser(token string) error {
 		return err
 	}
 
-	users := u.load()
+	user := u.load(uuid.FromStringOrNil(id))
 
-	for _, user := range users {
-		if user.ID == uuid.FromStringOrNil(id) {
-			user.EmailVerified = true
-			if err := u.update(uuid.FromStringOrNil(id), &user); err != nil {
-				return err
-			}
-			return nil
+	if user.ID != uuid.Nil {
+		user.EmailVerified = true
+		err := u.update(user.ID, &user)
+		if err != nil {
+			return err
 		}
+
+		return nil
 	}
 
 	return errors.New("user not found")
 }
 
-func (u *usersService) load() []Users {
+func (u *usersService) load(userId uuid.UUID) Users {
 	db := u.db.DB()
 
-	var users []Users
+	var user Users
 
-	result := db.Find(&users)
+	result := db.Where("id = ?", userId).First(&user)
 	if result.Error != nil {
-		panic(result.Error)
+		return Users{}
 	}
 
-	return users
+	return user
+}
+
+func (u *usersService) loadByEmail(email string) Users {
+	db := u.db.DB()
+
+	var user Users
+
+	result := db.Where("email = ?", email).First(&user)
+	if result.Error != nil {
+		return Users{}
+	}
+
+	return user
 }
 
 func (u *usersService) save(user *Users) error {
