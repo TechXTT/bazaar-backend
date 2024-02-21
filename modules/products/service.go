@@ -32,18 +32,16 @@ func NewProductsService(i *do.Injector) (Service, error) {
 }
 
 func (p *productsService) GetProducts() ([]Products, error) {
-	products := p.load()
+	products := p.loads()
 
 	return products, nil
 }
 
 func (p *productsService) GetProduct(id string) (*Products, error) {
-	products := p.load()
+	product := p.load(uuid.FromStringOrNil(id))
 
-	for _, product := range products {
-		if product.ID == uuid.FromStringOrNil(id) {
-			return &product, nil
-		}
+	if product.ID != uuid.Nil {
+		return &product, nil
 	}
 
 	return nil, errors.New("product not found")
@@ -162,12 +160,6 @@ func (p *productsService) SaveFile(file multipart.File, filepath string) (string
 	return p.s3spaces.SaveFile(file, filepath)
 }
 
-func (p *productsService) load() []Products {
-	var products []Products
-	p.db.DB().Joins("Store").Find(&products)
-	return products
-}
-
 func (p *productsService) GetOrder(id string) (*Orders, error) {
 	db := p.db.DB()
 
@@ -175,6 +167,18 @@ func (p *productsService) GetOrder(id string) (*Orders, error) {
 	db.Preload("Product").Where("id = ?", id).First(&order)
 
 	return &order, nil
+}
+
+func (p *productsService) loads() []Products {
+	var products []Products
+	p.db.DB().Joins("Store").Find(&products)
+	return products
+}
+
+func (p *productsService) load(productId uuid.UUID) Products {
+	var product Products
+	p.db.DB().Joins("Store").Where("id = ?", productId).First(&product)
+	return product
 }
 
 func (p *productsService) save(userId uuid.UUID, product *Products) (string, error) {
