@@ -2,8 +2,8 @@ package disputes
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
@@ -28,8 +28,6 @@ func (d *disputesHandler) CreateDispute(w http.ResponseWriter, r *http.Request) 
 
 	files := r.MultipartForm.File["images"]
 
-	log.Println(files)
-
 	dispute.Dispute = r.FormValue("dispute")
 	dispute.OrderID = uuid.FromStringOrNil(r.FormValue("orderId"))
 
@@ -39,9 +37,10 @@ func (d *disputesHandler) CreateDispute(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	for _, file := range files {
-		filepath := "disputes/" + id + "/" + file.Filename
+	for index, file := range files {
+		filepath := "disputes/" + id + "/" + strconv.Itoa(index)
 		imageURL, err := d.svc.SaveFile(file, filepath)
+
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
