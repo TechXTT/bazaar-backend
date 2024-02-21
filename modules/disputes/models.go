@@ -5,19 +5,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type Messages struct {
-	gorm.Model
-	ID        uuid.UUID `gorm:"primaryKey"`
-	DisputeID uuid.UUID `gorm:"not null"`
-	SenderID  uuid.UUID `gorm:"not null"`
-	Message   string    `gorm:"not null"`
-}
-
-func (m *Messages) BeforeCreate(tx *gorm.DB) (err error) {
-	m.ID, err = uuid.NewV4()
-	return err
-}
-
 type Disputes struct {
 	gorm.Model
 	ID       uuid.UUID       `gorm:"not null"`
@@ -25,7 +12,6 @@ type Disputes struct {
 	Order    Orders          `gorm:"foreignKey:OrderID"`
 	Dispute  string          `gorm:"not null"`
 	Resolved bool            `gorm:"default:false"`
-	Messages []Messages      `gorm:"foreignKey:DisputeID"`
 	Images   []DisputeImages `gorm:"foreignKey:DisputeID"`
 }
 
