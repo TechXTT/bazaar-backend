@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
-	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
 )
@@ -12,11 +11,9 @@ import (
 // NewStoresService creates a new users service
 func NewStoresService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
-	jwks := do.MustInvoke[jwt.Jwks](i)
 
 	return &storesService{
-		db:   db,
-		jwks: jwks,
+		db: db,
 	}, nil
 }
 

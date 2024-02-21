@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
-	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
@@ -21,12 +20,10 @@ type OrderResponse struct {
 // NewProductsService creates a new users service
 func NewProductsService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
-	jwks := do.MustInvoke[jwt.Jwks](i)
 	s3spaces := do.MustInvoke[s3spaces.S3Spaces](i)
 
 	return &productsService{
 		db:       db,
-		jwks:     jwks,
 		s3spaces: s3spaces,
 	}, nil
 }

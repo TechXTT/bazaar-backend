@@ -15,7 +15,7 @@ type DisputeRequest struct {
 	Dispute string `json:"dispute"`
 }
 
-func NewDisputeService(i *do.Injector) (Service, error) {
+func NewDisputesService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	s3spaces := do.MustInvoke[s3spaces.S3Spaces](i)
 

@@ -5,7 +5,6 @@ import (
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/db"
-	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/TechXTT/bazaar-backend/services/web"
 	"github.com/gorilla/mux"
@@ -60,8 +59,7 @@ type (
 	}
 
 	storesService struct {
-		db   db.DB
-		jwks jwt.Jwks
+		db db.DB
 	}
 
 	storesHandler struct {

@@ -50,8 +50,8 @@ func init() {
 
 	// Provide dependencies during boot
 	app.HookBoot.Listen(func(e hooks.Event[*do.Injector]) {
-		do.Provide(e.Msg, NewDisputeService)
-		do.Provide(e.Msg, NewDisputeHandler)
+		do.Provide(e.Msg, NewDisputesService)
+		do.Provide(e.Msg, NewDisputesHandler)
 	})
 
 	// Register routes during router build

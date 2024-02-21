@@ -10,7 +10,7 @@ import (
 	"github.com/samber/do"
 )
 
-func NewDisputeHandler(i *do.Injector) (Handler, error) {
+func NewDisputesHandler(i *do.Injector) (Handler, error) {
 	return &disputesHandler{
 		svc: do.MustInvoke[Service](i),
 	}, nil
