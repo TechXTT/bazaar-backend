@@ -161,7 +161,7 @@ func (p *productsService) GetOrder(id string) (*Orders, error) {
 	db := p.db.DB()
 
 	order := Orders{}
-	db.Preload("Product").Where("id = ?", id).First(&order)
+	db.Preload("Product").Where("orders.id = ?", id).First(&order)
 
 	return &order, nil
 }
@@ -174,7 +174,7 @@ func (p *productsService) loads() []Products {
 
 func (p *productsService) load(productId uuid.UUID) Products {
 	var product Products
-	p.db.DB().Joins("Store").Where("id = ?", productId).First(&product)
+	p.db.DB().Joins("Store").Where("products.id = ?", productId).First(&product)
 	return product
 }
 

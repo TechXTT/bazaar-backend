@@ -38,14 +38,13 @@ type (
 )
 
 func init() {
-
 	// Provide dependencies during app boot process
 	app.HookBoot.Listen(func(e hooks.Event[*do.Injector]) {
-		do.Provide(e.Msg, Newobserver)
+		do.Provide(e.Msg, NewObserver)
 	})
 }
 
-func Newobserver(i *do.Injector) (Observer, error) {
+func NewObserver(i *do.Injector) (Observer, error) {
 	wsClient := do.MustInvoke[wsclient.WsClient](i)
 	db := do.MustInvoke[db.DB](i)
 	cfg := do.MustInvoke[config.Config](i)

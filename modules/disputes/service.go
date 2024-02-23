@@ -155,6 +155,7 @@ func (w *disputesService) CloseDispute(userId string, id string) error {
 	err = db.Raw(`
 	SELECT 
 		   CASE 
+		   	  WHEN disputes.resolved = true THEN 'resolved'
 			  WHEN orders.buyer_id = ? THEN 'buyer' 
 			  WHEN stores.owner_id = ? THEN 'seller' 
 			  ELSE 'unrelated'
@@ -176,6 +177,8 @@ func (w *disputesService) CloseDispute(userId string, id string) error {
 
 	if result == "unrelated" {
 		return errors.New("user is not related to this dispute")
+	} else if result == "resolved" {
+		return errors.New("dispute is resolved")
 	}
 
 	dispute.Resolved = true

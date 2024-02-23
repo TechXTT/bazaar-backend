@@ -37,17 +37,7 @@ func NewDB(i *do.Injector) (DB, error) {
 		cfg: do.MustInvoke[config.Config](i),
 	}
 
-	db, err := gorm.Open(postgres.New(postgres.Config{
-		DSN: fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require",
-			dbCfg.cfg.GetDB().POSTGRES_HOST,
-			dbCfg.cfg.GetDB().POSTGRES_PORT,
-			dbCfg.cfg.GetDB().POSTGRES_USER,
-			dbCfg.cfg.GetDB().POSTGRES_PASSWORD,
-			dbCfg.cfg.GetDB().POSTGRES_DB,
-		), PreferSimpleProtocol: true}), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
+	db := dbCfg.DB()
 
 	if !db.Migrator().HasTable(&Users{}) {
 		db.Migrator().CreateTable(&Users{})
@@ -67,10 +57,6 @@ func NewDB(i *do.Injector) (DB, error) {
 		db.Migrator().CreateTable(&Orders{})
 		log.Println("Created orders table")
 	}
-	// if !db.Migrator().HasTable(&Messages{}) {
-	// 	db.Migrator().CreateTable(&Messages{})
-	// 	log.Println("Created messages table")
-	// }
 	if !db.Migrator().HasTable(&Disputes{}) {
 		db.Migrator().CreateTable(&Disputes{})
 		log.Println("Created disputes table")
