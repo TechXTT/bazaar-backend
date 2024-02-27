@@ -67,5 +67,4 @@ func (s *s3spaces) SaveFile(file multipart.File, filepath string) (string, error
 	}
 
 	return filepath, nil
-
 }
