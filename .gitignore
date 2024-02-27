@@ -22,3 +22,6 @@ go.work
 
 # environment file
 .env
+private.pem
+public.pem
+*.s3cfg
