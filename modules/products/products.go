@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
+	"github.com/TechXTT/bazaar-backend/services/algolia"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/TechXTT/bazaar-backend/services/s3spaces"
@@ -84,6 +85,7 @@ type (
 	productsService struct {
 		db       db.DB
 		s3spaces s3spaces.S3Spaces
+		algolia  algolia.Algolia
 	}
 
 	productsHandler struct {

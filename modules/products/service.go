@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"strings"
 
+	"github.com/TechXTT/bazaar-backend/services/algolia"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/gofrs/uuid/v5"
@@ -21,10 +22,12 @@ type OrderResponse struct {
 func NewProductsService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	s3spaces := do.MustInvoke[s3spaces.S3Spaces](i)
+	algolia := do.MustInvoke[algolia.Algolia](i)
 
 	return &productsService{
 		db:       db,
 		s3spaces: s3spaces,
+		algolia:  algolia,
 	}, nil
 }
 
@@ -51,6 +54,28 @@ func (p *productsService) CreateProduct(userId string, product *Products) (strin
 		return "", err
 	}
 
+	var storeName string
+
+	p.db.DB().Model(&Stores{}).Select("name").Where("id = ?", product.StoreID).Row().Scan(&storeName)
+
+	client := p.algolia.Algolia()
+	index := client.InitIndex("products")
+
+	algoliaProduct := AlgoliaProducts{
+		ObjectID:    id,
+		Name:        product.Name,
+		Price:       product.Price,
+		Unit:        product.Unit,
+		ImageURL:    product.ImageURL,
+		Description: product.Description,
+		StoreName:   storeName,
+	}
+
+	_, err = index.SaveObject(algoliaProduct)
+	if err != nil {
+		return "", err
+	}
+
 	return id, nil
 }
 
@@ -60,12 +85,42 @@ func (p *productsService) UpdateProduct(userId string, id string, product *Produ
 		return err
 	}
 
+	var storeName string
+
+	p.db.DB().Model(&Stores{}).Select("name").Where("id = ?", product.StoreID).Row().Scan(&storeName)
+
+	client := p.algolia.Algolia()
+	index := client.InitIndex("products")
+
+	algoliaProduct := AlgoliaProducts{
+		ObjectID:    id,
+		Name:        product.Name,
+		Price:       product.Price,
+		Unit:        product.Unit,
+		ImageURL:    product.ImageURL,
+		Description: product.Description,
+		StoreName:   storeName,
+	}
+
+	_, err := index.SaveObject(algoliaProduct)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (p *productsService) DeleteProduct(userId string, id string) error {
 
 	if err := p.delete(uuid.FromStringOrNil(userId), id); err != nil {
+		return err
+	}
+
+	client := p.algolia.Algolia()
+	index := client.InitIndex("products")
+
+	_, err := index.DeleteObject(id)
+	if err != nil {
 		return err
 	}
 
@@ -129,6 +184,21 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 
 		order.Total = float64(order.Quantity) * product.Price
 		if err := db.Create(&order).Error; err != nil {
+			return nil, err
+		}
+
+		client := p.algolia.Algolia()
+		index := client.InitIndex("orders")
+
+		algoliaOrder := AlgoliaOrders{
+			ObjectID: order.ID.String(),
+			Product:  product.Name,
+			Buyer:    ordersData[i].BuyerAddress,
+			Quantity: order.Quantity,
+		}
+
+		_, err = index.SaveObject(algoliaOrder)
+		if err != nil {
 			return nil, err
 		}
 
