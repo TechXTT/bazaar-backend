@@ -25,6 +25,8 @@ type (
 		GetWs() WsConfig
 
 		GetS3Spaces() S3SpacesConfig
+
+		GetAlgolia() AlgoliaConfig
 	}
 
 	Base struct {
@@ -34,6 +36,7 @@ type (
 		JWT      JWTConfig
 		Ws       WsConfig
 		S3Spaces S3SpacesConfig
+		Algolia  AlgoliaConfig
 	}
 
 	HTTPConfig struct {
@@ -78,6 +81,11 @@ type (
 		SpacesKey    string
 		SpacesSecret string
 		SpacesName   string
+	}
+
+	AlgoliaConfig struct {
+		AppID  string
+		APIKey string
 	}
 )
 
@@ -153,6 +161,11 @@ func NewConfig(i *do.Injector) (Config, error) {
 		SpacesName:   os.Getenv("SPACES_NAME"),
 	}
 
+	cfg.Algolia = AlgoliaConfig{
+		AppID:  os.Getenv("ALGOLIA_APP_ID"),
+		APIKey: os.Getenv("ALGOLIA_API_KEY"),
+	}
+
 	return &cfg, nil
 
 }
@@ -179,4 +192,8 @@ func (c *Base) GetWs() WsConfig {
 
 func (c *Base) GetS3Spaces() S3SpacesConfig {
 	return c.S3Spaces
+}
+
+func (c *Base) GetAlgolia() AlgoliaConfig {
+	return c.Algolia
 }

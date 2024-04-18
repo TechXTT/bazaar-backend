@@ -49,6 +49,16 @@ type Products struct {
 	Store       Stores    `gorm:"foreignKey:StoreID"`
 }
 
+type AlgoliaProducts struct {
+	ObjectID    string  `json:"objectID"`
+	Name        string  `json:"name"`
+	Price       float64 `json:"price"`
+	Unit        string  `json:"unit"`
+	ImageURL    string  `json:"imageURL"`
+	Description string  `json:"description"`
+	StoreName   string  `json:"storeName"`
+}
+
 type Orders struct {
 	gorm.Model
 	ID        uuid.UUID   `gorm:"primaryKey"`
@@ -60,6 +70,13 @@ type Orders struct {
 	Status    OrderStatus `gorm:"not null, type:ENUM('pending', 'completed', 'cancelled', 'released'), default:'pending'"`
 	TxHash    string
 	// TODO: add tracking number and shipping address for orders, and txHash for payment
+}
+
+type AlgoliaOrders struct {
+	ObjectID string `json:"objectID"`
+	Product  string `json:"product"`
+	Buyer    string `json:"buyer"`
+	Quantity int    `json:"quantity"`
 }
 
 func (o *Orders) BeforeCreate(tx *gorm.DB) (err error) {
