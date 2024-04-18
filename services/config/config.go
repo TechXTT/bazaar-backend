@@ -162,7 +162,7 @@ func NewConfig(i *do.Injector) (Config, error) {
 	}
 
 	cfg.Algolia = AlgoliaConfig{
-		AppID:  os.Getenv("ALGOLIA_APPLICATION_ID"),
+		AppID:  os.Getenv("ALGOLIA_APP_ID"),
 		APIKey: os.Getenv("ALGOLIA_API_KEY"),
 	}
 
