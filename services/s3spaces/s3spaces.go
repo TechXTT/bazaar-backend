@@ -44,8 +44,7 @@ func (s *s3spaces) SaveFile(file multipart.File, filepath string) (string, error
 
 	s3Config := &aws.Config{
 		Credentials:      credentials.NewStaticCredentials(s3SpacesCfg.SpacesKey, s3SpacesCfg.SpacesSecret, ""),
-		Endpoint:         aws.String("https://fra1.digitaloceanspaces.com"),
-		Region:           aws.String("us-east-1"),
+		Region:           aws.String("eu-central-1"),
 		S3ForcePathStyle: aws.Bool(false),
 	}
 
