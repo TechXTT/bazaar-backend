@@ -13,7 +13,7 @@ var smtp_password = os.Getenv("SMTP_PASSWORD")
 
 func SendEmailVerification(reciever string, recieverName string, verificationLink string) error {
 
-	auth := smtp.PlainAuth("", "bazaar@bozhilov.me", smtp_password, "smtp.gmail.com")
+	auth := smtp.PlainAuth("", "marogo142005@gmail.com", smtp_password, "smtp.gmail.com")
 
 	filePrefix, _ := filepath.Abs("./modules/users/pkg/email")
 
@@ -35,7 +35,7 @@ func SendEmailVerification(reciever string, recieverName string, verificationLin
 		VerificationLink: verificationLink,
 	})
 
-	err = smtp.SendMail("smtp.gmail.com:587", auth, "bazaar@bozhilov.me", []string{reciever}, body.Bytes())
+	err = smtp.SendMail("smtp.gmail.com:587", auth, "marogo142005@gmail.com", []string{reciever}, body.Bytes())
 	if err != nil {
 		return err
 	}
