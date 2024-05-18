@@ -68,7 +68,7 @@ func (s *storesService) GetUserStores(userId string) ([]Stores, error) {
 
 func (s *storesService) loads() []Stores {
 	var stores []Stores
-	s.db.DB().Find(&stores)
+	s.db.DB().Preload("Products").Preload("Owner").Find(&stores)
 	return stores
 }
 
