@@ -103,5 +103,5 @@ func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "http://localhost:3000", http.StatusSeeOther)
+	http.Redirect(w, r, "https://bazaar.bozhilov.me/", http.StatusSeeOther)
 }
