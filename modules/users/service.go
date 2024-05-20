@@ -208,7 +208,7 @@ func (u *usersService) generateEmailVerificationLink(id uuid.UUID) (string, erro
 		return "", err
 	}
 
-	return fmt.Sprintf("http://localhost:8000/api/users/verify-email?token=%s", token), nil
+	return fmt.Sprintf("https://bazaar-backend-t5f94.ondigitalocean.app/api/users/verify-email?token=%s", token), nil
 }
 
 func (u *usersService) validateAddress(address string) error {
