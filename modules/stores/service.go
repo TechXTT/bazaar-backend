@@ -6,7 +6,6 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
-	"gorm.io/gorm"
 )
 
 // NewStoresService creates a new users service
@@ -69,9 +68,7 @@ func (s *storesService) GetUserStores(userId string) ([]Stores, error) {
 
 func (s *storesService) loads() []Stores {
 	var stores []Stores
-	s.db.DB().Preload("Products", func(tx *gorm.DB) *gorm.DB {
-		return tx.Limit(5)
-	}).Find(&stores)
+	s.db.DB().Preload("Products").Find(&stores)
 	return stores
 }
 
