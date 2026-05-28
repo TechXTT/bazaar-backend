@@ -9,6 +9,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 
 	// Services
+	"github.com/TechXTT/bazaar-backend/services/algolia"
 	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/observer"
 	"github.com/TechXTT/bazaar-backend/services/web"
@@ -16,7 +17,7 @@ import (
 
 	// Modules
 	_ "github.com/TechXTT/bazaar-backend/modules/disputes"
-	_ "github.com/TechXTT/bazaar-backend/modules/products"
+	"github.com/TechXTT/bazaar-backend/modules/products"
 	_ "github.com/TechXTT/bazaar-backend/modules/stores"
 	_ "github.com/TechXTT/bazaar-backend/modules/users"
 )
@@ -26,6 +27,37 @@ func main() {
 
 	cfg := do.MustInvoke[config.Config](i)
 	ob := do.MustInvoke[observer.Observer](i)
+
+	if cfg.GetAlgolia().SeedOnStartup {
+		go func() {
+			svc := do.MustInvoke[products.Service](i)
+			algoliaSvc := do.MustInvoke[algolia.AlgoliaService](i)
+			all, err := svc.GetProducts()
+			if err != nil {
+				log.Printf("algolia seed: GetProducts: %v", err)
+				return
+			}
+			records := make([]algolia.ProductRecord, len(all))
+			for j, pr := range all {
+				records[j] = algolia.ProductRecord{
+					ObjectID:    pr.ID.String(),
+					Name:        pr.Name,
+					Description: pr.Description,
+					Price:       pr.Price,
+					Unit:        pr.Unit,
+					ImageURL:    pr.ImageURL,
+					StoreID:     pr.StoreID.String(),
+					StoreName:   pr.Store.Name,
+					CreatedAt:   pr.CreatedAt,
+				}
+			}
+			if err := algoliaSvc.BulkIndex(records); err != nil {
+				log.Printf("algolia seed: BulkIndex: %v", err)
+				return
+			}
+			log.Printf("algolia: seeded %d products", len(records))
+		}()
+	}
 
 	if cfg.GetWs().BackfillOnStartup {
 		go func() {

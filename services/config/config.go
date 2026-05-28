@@ -25,6 +25,8 @@ type (
 		GetWs() WsConfig
 
 		GetS3Spaces() S3SpacesConfig
+
+		GetAlgolia() AlgoliaConfig
 	}
 
 	Base struct {
@@ -34,6 +36,7 @@ type (
 		JWT      JWTConfig
 		Ws       WsConfig
 		S3Spaces S3SpacesConfig
+		Algolia  AlgoliaConfig
 	}
 
 	HTTPConfig struct {
@@ -93,6 +96,14 @@ type (
 		LocalUploadDir string
 		PinataJWT      string
 		IPFSGateway    string
+	}
+
+	AlgoliaConfig struct {
+		AppID         string
+		WriteKey      string
+		SearchKey     string
+		ProductsIndex string
+		SeedOnStartup bool
 	}
 )
 
@@ -188,6 +199,15 @@ func NewConfig(i *do.Injector) (Config, error) {
 		IPFSGateway:    getEnv("IPFS_GATEWAY", "https://ipfs.io"),
 	}
 
+	algoliaSeed, _ := strconv.ParseBool(os.Getenv("ALGOLIA_SEED_ON_STARTUP"))
+	cfg.Algolia = AlgoliaConfig{
+		AppID:         os.Getenv("ALGOLIA_APP_ID"),
+		WriteKey:      os.Getenv("ALGOLIA_WRITE_KEY"),
+		SearchKey:     os.Getenv("ALGOLIA_SEARCH_KEY"),
+		ProductsIndex: getEnv("ALGOLIA_PRODUCTS_INDEX", "products"),
+		SeedOnStartup: algoliaSeed,
+	}
+
 	return &cfg, nil
 
 }
@@ -222,4 +242,8 @@ func (c *Base) GetWs() WsConfig {
 
 func (c *Base) GetS3Spaces() S3SpacesConfig {
 	return c.S3Spaces
+}
+
+func (c *Base) GetAlgolia() AlgoliaConfig {
+	return c.Algolia
 }

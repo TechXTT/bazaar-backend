@@ -1,6 +1,6 @@
 module github.com/TechXTT/bazaar-backend
 
-go 1.20
+go 1.21.11
 
 require (
 	github.com/aws/aws-sdk-go v1.50.12
@@ -18,6 +18,7 @@ require (
 
 require (
 	github.com/StackExchange/wmi v1.2.1 // indirect
+	github.com/algolia/algoliasearch-client-go/v4 v4.39.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
 	github.com/dchest/uniuri v1.2.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect

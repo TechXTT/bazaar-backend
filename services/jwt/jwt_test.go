@@ -20,6 +20,7 @@ func (c testConfig) GetApp() config.AppConfig           { return config.AppConfi
 func (c testConfig) GetJWT() config.JWTConfig           { return c.jwt }
 func (c testConfig) GetWs() config.WsConfig             { return config.WsConfig{} }
 func (c testConfig) GetS3Spaces() config.S3SpacesConfig { return config.S3SpacesConfig{} }
+func (c testConfig) GetAlgolia() config.AlgoliaConfig   { return config.AlgoliaConfig{} }
 
 func TestGenerateAndValidateToken(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)

@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"strings"
 
+	"github.com/TechXTT/bazaar-backend/services/algolia"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/gofrs/uuid/v5"
@@ -21,10 +22,12 @@ type OrderResponse struct {
 func NewProductsService(i *do.Injector) (Service, error) {
 	db := do.MustInvoke[db.DB](i)
 	s3spaces := do.MustInvoke[s3spaces.S3Spaces](i)
+	algoliaSvc := do.MustInvoke[algolia.AlgoliaService](i)
 
 	return &productsService{
 		db:       db,
 		s3spaces: s3spaces,
+		algolia:  algoliaSvc,
 	}, nil
 }
 
@@ -51,6 +54,9 @@ func (p *productsService) CreateProduct(userId string, product *Products) (strin
 		return "", err
 	}
 
+	saved := p.load(uuid.FromStringOrNil(id))
+	go p.algolia.IndexProduct(toAlgoliaRecord(saved))
+
 	return id, nil
 }
 
@@ -60,6 +66,9 @@ func (p *productsService) UpdateProduct(userId string, id string, product *Produ
 		return err
 	}
 
+	updated := p.load(uuid.FromStringOrNil(id))
+	go p.algolia.IndexProduct(toAlgoliaRecord(updated))
+
 	return nil
 }
 
@@ -68,6 +77,8 @@ func (p *productsService) DeleteProduct(userId string, id string) error {
 	if err := p.delete(uuid.FromStringOrNil(userId), id); err != nil {
 		return err
 	}
+
+	go p.algolia.DeleteProduct(id)
 
 	return nil
 }
@@ -182,6 +193,20 @@ func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
 	}
 
 	return &order, nil
+}
+
+func toAlgoliaRecord(p Products) algolia.ProductRecord {
+	return algolia.ProductRecord{
+		ObjectID:    p.ID.String(),
+		Name:        p.Name,
+		Description: p.Description,
+		Price:       p.Price,
+		Unit:        p.Unit,
+		ImageURL:    p.ImageURL,
+		StoreID:     p.StoreID.String(),
+		StoreName:   p.Store.Name,
+		CreatedAt:   p.CreatedAt,
+	}
 }
 
 func (p *productsService) loads() []Products {
