@@ -12,7 +12,7 @@ type (
 	// Service is the wsclient service interface
 	WsClient interface {
 		// InitEthClient initializes the ethereum client
-		InitEthClient() *ethclient.Client
+		InitEthClient() (*ethclient.Client, error)
 	}
 
 	wsclient struct {
@@ -33,11 +33,11 @@ func NewWsClient(i *do.Injector) (WsClient, error) {
 	}, nil
 }
 
-func (w *wsclient) InitEthClient() *ethclient.Client {
+func (w *wsclient) InitEthClient() (*ethclient.Client, error) {
 	client, err := ethclient.Dial(w.cfg.GetWs().ETH_URL)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return client
+	return client, nil
 }

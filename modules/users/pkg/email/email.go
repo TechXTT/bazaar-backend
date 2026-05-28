@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"log"
 	"net/smtp"
 	"os"
 	"path/filepath"
@@ -12,6 +13,10 @@ import (
 var smtp_password = os.Getenv("SMTP_PASSWORD")
 
 func SendEmailVerification(reciever string, recieverName string, verificationLink string) error {
+	if os.Getenv("SMTP_SKIP_SEND") == "true" {
+		log.Printf("email verification link for %s: %s", reciever, verificationLink)
+		return nil
+	}
 
 	auth := smtp.PlainAuth("", "marogo142005@gmail.com", smtp_password, "smtp.gmail.com")
 

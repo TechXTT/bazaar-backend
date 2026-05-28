@@ -1,13 +1,11 @@
 package disputes
 
 import (
-	"mime/multipart"
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
-	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/TechXTT/bazaar-backend/services/web"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
@@ -15,30 +13,27 @@ import (
 )
 
 type (
+	// Service exposes read-only views over on-chain dispute data indexed by the observer.
 	Service interface {
-		CreateDispute(userId string, d *Disputes) (string, error)
+		// ListDisputes returns all disputes where the caller is buyer or receiver.
+		ListDisputes(walletAddress string) ([]Disputes, error)
 
-		GetDispute(userId string, id string) (*Disputes, error)
+		// GetDispute returns a single dispute with evidence for the given orderId.
+		GetDispute(walletAddress string, orderId string) (*Disputes, error)
 
-		CloseDispute(userId string, id string) error
-
-		CreateDisputeImage(userId string, d *DisputeImages) error
-
-		SaveFile(file *multipart.FileHeader, bucket string) (string, error)
+		// GetEvidence returns evidence items for the given orderId.
+		GetEvidence(orderId string) ([]DisputeEvidence, error)
 	}
 
+	// Handler provides HTTP handlers for dispute read endpoints.
 	Handler interface {
-		// CreateDispute handles a request to create a dispute
-		CreateDispute(w http.ResponseWriter, r *http.Request)
-		// GetDispute handles a request to get a dispute
+		GetDisputes(w http.ResponseWriter, r *http.Request)
 		GetDispute(w http.ResponseWriter, r *http.Request)
-		// CloseDispute handles a request to close a dispute
-		CloseDispute(w http.ResponseWriter, r *http.Request)
+		GetEvidence(w http.ResponseWriter, r *http.Request)
 	}
 
 	disputesService struct {
-		db       db.DB
-		s3spaces s3spaces.S3Spaces
+		db db.DB
 	}
 
 	disputesHandler struct {
@@ -47,23 +42,20 @@ type (
 )
 
 func init() {
-
-	// Provide dependencies during boot
 	app.HookBoot.Listen(func(e hooks.Event[*do.Injector]) {
 		do.Provide(e.Msg, NewDisputesService)
 		do.Provide(e.Msg, NewDisputesHandler)
 	})
 
-	// Register routes during router build
 	web.HookBuildRouter.Listen(func(e hooks.Event[*mux.Router]) {
 		h := do.MustInvoke[Handler](do.DefaultInjector)
+		mw := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
 
-		middleware := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
 		authenticatedHandler := e.Msg.NewRoute().Subrouter()
-		authenticatedHandler.Use(middleware.AuthMiddleware)
+		authenticatedHandler.Use(mw.AuthMiddleware)
 
-		authenticatedHandler.HandleFunc("/disputes", h.CreateDispute).Methods("POST")
-		authenticatedHandler.HandleFunc("/disputes/order/{id}", h.GetDispute).Methods("GET")
-		authenticatedHandler.HandleFunc("/disputes/{id}", h.CloseDispute).Methods("PUT")
+		authenticatedHandler.HandleFunc("/disputes", h.GetDisputes).Methods(http.MethodGet)
+		authenticatedHandler.HandleFunc("/disputes/{orderId}", h.GetDispute).Methods(http.MethodGet)
+		authenticatedHandler.HandleFunc("/orders/{orderId}/evidence", h.GetEvidence).Methods(http.MethodGet)
 	})
 }

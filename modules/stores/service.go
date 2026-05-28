@@ -2,6 +2,7 @@ package stores
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/gofrs/uuid/v5"
@@ -31,6 +32,22 @@ func (s *storesService) GetStore(id string) (*Stores, error) {
 	}
 
 	return nil, errors.New("store not found")
+}
+
+func (s *storesService) GetStoreReputation(id string) (*db.SellerReputation, error) {
+	store := s.load(uuid.FromStringOrNil(id))
+	if store.ID == uuid.Nil {
+		return nil, errors.New("store not found")
+	}
+	if store.Owner.WalletAddress == "" {
+		return nil, errors.New("store owner not found")
+	}
+
+	var rep db.SellerReputation
+	if err := s.db.DB().Where("seller_wallet = ?", strings.ToLower(store.Owner.WalletAddress)).First(&rep).Error; err != nil {
+		return nil, errors.New("no reputation data")
+	}
+	return &rep, nil
 }
 
 func (s *storesService) CreateStore(userId string, store *Stores) error {
@@ -68,13 +85,40 @@ func (s *storesService) GetUserStores(userId string) ([]Stores, error) {
 
 func (s *storesService) loads() []Stores {
 	var stores []Stores
-	s.db.DB().Find(&stores)
+	s.db.DB().Preload("Owner").Find(&stores)
+
+	var wallets []string
+	for _, st := range stores {
+		if st.Owner.WalletAddress != "" {
+			wallets = append(wallets, strings.ToLower(st.Owner.WalletAddress))
+		}
+	}
+	if len(wallets) > 0 {
+		var reps []db.SellerReputation
+		s.db.DB().Where("seller_wallet IN ?", wallets).Find(&reps)
+		repMap := make(map[string]*db.SellerReputation, len(reps))
+		for i := range reps {
+			repMap[reps[i].SellerWallet] = &reps[i]
+		}
+		for i := range stores {
+			if w := strings.ToLower(stores[i].Owner.WalletAddress); w != "" {
+				stores[i].Reputation = repMap[w]
+			}
+		}
+	}
 	return stores
 }
 
 func (s *storesService) load(storeId uuid.UUID) Stores {
 	var store Stores
 	s.db.DB().Preload("Owner").Where("id = ?", storeId).First(&store)
+
+	if store.ID != uuid.Nil && store.Owner.WalletAddress != "" {
+		var rep db.SellerReputation
+		if s.db.DB().Where("seller_wallet = ?", strings.ToLower(store.Owner.WalletAddress)).First(&rep).Error == nil {
+			store.Reputation = &rep
+		}
+	}
 	return store
 }
 

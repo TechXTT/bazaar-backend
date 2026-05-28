@@ -94,34 +94,45 @@ func (p *productsService) GetProductsFromStore(storeId string, cursor string, li
 func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) ([]OrderResponse, error) {
 	db := p.db.DB()
 
-	orders := []Orders{}
+	productIDs := make([]uuid.UUID, 0, len(ordersData))
 	for _, orderData := range ordersData {
-		order := Orders{
-			ProductID: orderData.ProductID,
-			Quantity:  orderData.Quantity,
-		}
-		order.CreatedAt = orderData.CreatedAt
-		orders = append(orders, order)
+		productIDs = append(productIDs, orderData.ProductID)
 	}
+
+	var products []Products
+	if err := db.Preload("Store.Owner").Where("id IN ?", productIDs).Find(&products).Error; err != nil {
+		return nil, err
+	}
+
+	productByID := make(map[uuid.UUID]Products, len(products))
+	for _, product := range products {
+		productByID[product.ID] = product
+	}
+
 	var orderResponses []OrderResponse
 
-	for i, order := range orders {
-		order.BuyerID = uuid.FromStringOrNil(userId)
-		product, err := p.GetProduct(order.ProductID.String())
-		if err != nil {
-			return nil, err
+	for _, orderData := range ordersData {
+		product, ok := productByID[orderData.ProductID]
+		if !ok {
+			return nil, errors.New("product not found")
 		}
 
-		var owner Users
-		db.Where("id = ?", product.Store.OwnerID).First(&owner)
+		owner := product.Store.Owner
 
 		if owner.WalletAddress == "" {
 			return nil, errors.New("owner wallet address not found")
 		}
 
-		if strings.EqualFold(owner.WalletAddress, ordersData[i].BuyerAddress) {
+		if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
 			return nil, errors.New("owner and buyer cannot be the same")
 		}
+
+		order := Orders{
+			ProductID: orderData.ProductID,
+			BuyerID:   uuid.FromStringOrNil(userId),
+			Quantity:  orderData.Quantity,
+		}
+		order.CreatedAt = orderData.CreatedAt
 
 		if owner.ID == order.BuyerID {
 			return nil, errors.New("owner and buyer cannot be the same")
@@ -157,11 +168,18 @@ func (p *productsService) SaveFile(file multipart.File, filepath string) (string
 	return p.s3spaces.SaveFile(file, filepath)
 }
 
-func (p *productsService) GetOrder(id string) (*Orders, error) {
+func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
 	db := p.db.DB()
 
 	order := Orders{}
-	db.Preload("Product").Where("orders.id = ?", id).First(&order)
+	if err := db.Preload("Product.Store").Where("orders.id = ?", id).First(&order).Error; err != nil {
+		return nil, err
+	}
+
+	requesterID := uuid.FromStringOrNil(userId)
+	if order.BuyerID != requesterID && order.Product.Store.OwnerID != requesterID {
+		return nil, errors.New("unauthorized")
+	}
 
 	return &order, nil
 }

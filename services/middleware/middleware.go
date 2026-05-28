@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
+	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/mikestefanello/hooks"
 	"github.com/samber/do"
@@ -38,16 +40,16 @@ func (m *middleware) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
 
-		if token == "" {
-			http.Redirect(w, r, "/login", http.StatusUnauthorized)
+		if !strings.HasPrefix(token, "Bearer ") {
+			writeUnauthorized(w)
 			return
 		}
 
-		token = token[7:]
+		token = strings.TrimPrefix(token, "Bearer ")
 
 		id, err := m.jwt.ValidateToken(token)
 		if err != nil {
-			http.Redirect(w, r, "/login", http.StatusUnauthorized)
+			writeUnauthorized(w)
 			return
 		}
 
@@ -55,4 +57,8 @@ func (m *middleware) AuthMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func writeUnauthorized(w http.ResponseWriter) {
+	httpjson.WriteError(w, http.StatusUnauthorized, "unauthorized")
 }

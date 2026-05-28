@@ -1,8 +1,17 @@
 package jwt
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
+	"fmt"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
@@ -11,6 +20,14 @@ import (
 	"github.com/mikestefanello/hooks"
 	"github.com/samber/do"
 )
+
+var devKey struct {
+	sync.Once
+	private *rsa.PrivateKey
+	err     error
+}
+
+var devKeyLog sync.Once
 
 type (
 	Jwks interface {
@@ -40,9 +57,8 @@ func NewJwk(i *do.Injector) (Jwks, error) {
 }
 
 func (j *jwks) GenerateToken(id string) (string, error) {
-	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(j.cfg.GetJWT().PrivateKey))
+	privateKey, err := j.privateKey()
 	if err != nil {
-		log.Printf("failed to parse private key: %v", err)
 		return "", err
 	}
 
@@ -63,9 +79,8 @@ func (j *jwks) GenerateToken(id string) (string, error) {
 }
 
 func (j *jwks) ValidateToken(token string) (string, error) {
-	publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(j.cfg.GetJWT().PublicKey))
+	publicKey, err := j.publicKey()
 	if err != nil {
-		log.Printf("failed to parse private key: %v", err)
 		return "", err
 	}
 
@@ -78,28 +93,101 @@ func (j *jwks) ValidateToken(token string) (string, error) {
 	)
 	if err != nil {
 		log.Printf("failed to parse token: %v", err)
-		return "", err
-	} else if !parsedToken.Valid {
-		log.Printf("token is invalid")
-		return "", err
-	} else if errors.Is(err, jwt.ErrSignatureInvalid) {
-		log.Printf("token signature is invalid")
-		return "", err
-	} else if errors.Is(err, jwt.ErrTokenExpired) {
-		log.Printf("token is expired")
-		return "", err
+		return "", fmt.Errorf("invalid token: %w", err)
 	}
 
 	claims, ok := parsedToken.Claims.(*jwt.RegisteredClaims)
-	if !ok {
-		log.Printf("failed to parse claims")
-		return "", err
-	}
-
-	if claims.ExpiresAt.Time.Before(time.Now()) {
-		log.Printf("token is expired")
-		return "", err
+	if !ok || !parsedToken.Valid {
+		return "", errors.New("invalid claims")
 	}
 
 	return claims.ID, nil
+}
+
+func (j *jwks) privateKey() (*rsa.PrivateKey, error) {
+	if isConfiguredPEM(j.cfg.GetJWT().PrivateKey, "RSA PRIVATE KEY") {
+		privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(j.cfg.GetJWT().PrivateKey))
+		if err == nil {
+			return privateKey, nil
+		}
+		return nil, err
+	}
+
+	return developmentKey(j.cfg.GetJWT().DevKeyFile)
+}
+
+func (j *jwks) publicKey() (*rsa.PublicKey, error) {
+	if isConfiguredPEM(j.cfg.GetJWT().PublicKey, "PUBLIC KEY") {
+		publicKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(j.cfg.GetJWT().PublicKey))
+		if err == nil {
+			return publicKey, nil
+		}
+		return nil, err
+	}
+
+	privateKey, err := developmentKey(j.cfg.GetJWT().DevKeyFile)
+	if err != nil {
+		return nil, err
+	}
+	return &privateKey.PublicKey, nil
+}
+
+func developmentKey(path string) (*rsa.PrivateKey, error) {
+	devKey.Do(func() {
+		devKey.private, devKey.err = loadOrCreateDevelopmentKey(path)
+		if devKey.err == nil {
+			devKeyLog.Do(func() {
+				log.Printf("using development JWT keypair from %s", path)
+			})
+		}
+	})
+	return devKey.private, devKey.err
+}
+
+func loadOrCreateDevelopmentKey(path string) (*rsa.PrivateKey, error) {
+	if path != "" {
+		if existing, err := os.ReadFile(path); err == nil {
+			privateKey, parseErr := jwt.ParseRSAPrivateKeyFromPEM(existing)
+			if parseErr == nil {
+				return privateKey, nil
+			}
+			return nil, parseErr
+		}
+	}
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+
+	if path != "" {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return nil, err
+		}
+
+		privatePEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		})
+		if err := os.WriteFile(path, privatePEM, 0o600); err != nil {
+			return nil, err
+		}
+	}
+
+	return privateKey, nil
+}
+
+func isConfiguredPEM(value string, marker string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	if trimmed == fmt.Sprintf("-----BEGIN %s-----\n-----END %s-----", marker, marker) {
+		return false
+	}
+	if trimmed == fmt.Sprintf("-----BEGIN %s-----\r\n-----END %s-----", marker, marker) {
+		return false
+	}
+	return strings.Contains(trimmed, fmt.Sprintf("BEGIN %s", marker)) &&
+		strings.Contains(trimmed, fmt.Sprintf("END %s", marker))
 }

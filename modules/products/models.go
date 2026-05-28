@@ -30,7 +30,7 @@ type Stores struct {
 	gorm.Model
 	ID       uuid.UUID  `gorm:"primaryKey"`
 	Name     string     `gorm:"unique, not null"`
-	OwnerID  uuid.UUID  `gorm:"not null"`
+	OwnerID  uuid.UUID  `gorm:"not null;index"`
 	Owner    Users      `gorm:"foreignKey:OwnerID"`
 	Products []Products `gorm:"foreignKey:StoreID"`
 }
@@ -45,19 +45,19 @@ type Products struct {
 	ImageURL string
 	// TODO: Define options for products
 	Description string    `gorm:"not null"`
-	StoreID     uuid.UUID `gorm:"not null"`
+	StoreID     uuid.UUID `gorm:"not null;index"`
 	Store       Stores    `gorm:"foreignKey:StoreID"`
 }
 
 type Orders struct {
 	gorm.Model
 	ID        uuid.UUID   `gorm:"primaryKey"`
-	ProductID uuid.UUID   `gorm:"not null"`
+	ProductID uuid.UUID   `gorm:"not null;index"`
 	Product   Products    `gorm:"foreignKey:ProductID"`
-	BuyerID   uuid.UUID   `gorm:"not null"`
+	BuyerID   uuid.UUID   `gorm:"not null;index"`
 	Quantity  int         `gorm:"not null"`
 	Total     float64     `gorm:"not null"`
-	Status    OrderStatus `gorm:"not null, type:ENUM('pending', 'completed', 'cancelled', 'released'), default:'pending'"`
+	Status    OrderStatus `gorm:"not null;type:varchar(20);default:'pending'"`
 	TxHash    string
 	// TODO: add tracking number and shipping address for orders, and txHash for payment
 }

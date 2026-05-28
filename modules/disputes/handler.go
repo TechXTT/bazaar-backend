@@ -3,9 +3,8 @@ package disputes
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 
-	"github.com/gofrs/uuid/v5"
+	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
 )
@@ -16,61 +15,27 @@ func NewDisputesHandler(i *do.Injector) (Handler, error) {
 	}, nil
 }
 
-func (d *disputesHandler) CreateDispute(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
-	dispute := &Disputes{}
+func (d *disputesHandler) GetDisputes(w http.ResponseWriter, r *http.Request) {
+	walletAddress := r.Header.Get("user_id")
 
-	err := r.ParseMultipartForm(10 << 20)
+	disputes, err := d.svc.ListDisputes(walletAddress)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	files := r.MultipartForm.File["images"]
-
-	dispute.Dispute = r.FormValue("dispute")
-	dispute.OrderID = uuid.FromStringOrNil(r.FormValue("orderId"))
-
-	id, err := d.svc.CreateDispute(userId, dispute)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	for index, file := range files {
-		filepath := "disputes/" + id + "/" + strconv.Itoa(index)
-		imageURL, err := d.svc.SaveFile(file, filepath)
-
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		disputeImage := DisputeImages{
-			DisputeID: uuid.FromStringOrNil(id),
-			Image:     imageURL,
-		}
-
-		if err := d.svc.CreateDisputeImage(userId, &disputeImage); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"id": id})
+	json.NewEncoder(w).Encode(disputes)
 }
 
 func (d *disputesHandler) GetDispute(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	walletAddress := r.Header.Get("user_id")
 	vars := mux.Vars(r)
-	id := vars["id"]
+	orderId := vars["orderId"]
 
-	dispute, err := d.svc.GetDispute(userId, id)
+	dispute, err := d.svc.GetDispute(walletAddress, orderId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpjson.WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -78,15 +43,16 @@ func (d *disputesHandler) GetDispute(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dispute)
 }
 
-func (d *disputesHandler) CloseDispute(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+func (d *disputesHandler) GetEvidence(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	id := vars["id"]
+	orderId := vars["orderId"]
 
-	if err := d.svc.CloseDispute(userId, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	evidence, err := d.svc.GetEvidence(orderId)
+	if err != nil {
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(evidence)
 }

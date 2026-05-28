@@ -2,6 +2,8 @@ package users
 
 import (
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
@@ -14,59 +16,59 @@ import (
 	"github.com/samber/do"
 )
 
-type (
-	Credentials struct {
-		Email    string
-		Password string
-	}
+type nonceEntry struct {
+	nonce     string
+	expiresAt time.Time
+}
 
+type (
 	// Service is the users service interface
 	Service interface {
-		// CreateUser creates a new user
-		CreateUser(u *Users) error
+		// GetNonce returns a one-time nonce for the given wallet address
+		GetNonce(walletAddress string) (string, error)
 
-		// UpdateUser updates a user
-		UpdateUser(id string, u *Users) error
+		// VerifySIWE verifies a SIWE message+signature and returns a JWT
+		VerifySIWE(message string, signature string) (string, *Users, error)
 
-		// DeleteUser deletes a user
-		DeleteUser(id string) error
+		// UpdateUser updates display name fields for the authenticated wallet
+		UpdateUser(walletAddress string, u *Users) error
 
-		// GetMe returns the current user using JWKS token
-		GetMe(id string) (*Users, error)
+		// DeleteUser removes the user identified by walletAddress
+		DeleteUser(walletAddress string) error
 
-		// LoginUser logs in a user
-		LoginUser(email string, password string) (string, error)
+		// GetMe returns the user for the given wallet address (from JWT subject)
+		GetMe(walletAddress string) (*Users, error)
 
-		// VerifyUser verifies a user
-		VerifyUser(token string) error
+		// RefreshToken issues a fresh JWT for an already-authenticated wallet
+		RefreshToken(walletAddress string) (string, error)
 	}
 
-	// Handler provides the users handlers
+	// Handler provides the users HTTP handlers
 	Handler interface {
+		// Nonce handles POST /api/auth/nonce
+		Nonce(w http.ResponseWriter, r *http.Request)
 
-		// Create handles a request to create a new user
-		Create(w http.ResponseWriter, r *http.Request)
+		// Verify handles POST /api/auth/verify
+		Verify(w http.ResponseWriter, r *http.Request)
 
-		// Update handles a request to update a user
+		// Update handles PUT /api/users
 		Update(w http.ResponseWriter, r *http.Request)
 
-		// Delete handles a request to delete a user
+		// Delete handles DELETE /api/users
 		Delete(w http.ResponseWriter, r *http.Request)
 
-		// Me handles a request to get the current user
+		// Me handles GET /api/users/me
 		Me(w http.ResponseWriter, r *http.Request)
 
-		// Login handles a request to login a user
-		Login(w http.ResponseWriter, r *http.Request)
-
-		// Verify handles a request to verify a user
-		Verify(w http.ResponseWriter, r *http.Request)
+		// Refresh handles POST /api/users/refresh
+		Refresh(w http.ResponseWriter, r *http.Request)
 	}
 
 	usersService struct {
-		db   db.DB
-		jwks jwt.Jwks
-		cfg  config.Config
+		db     db.DB
+		jwks   jwt.Jwks
+		cfg    config.Config
+		nonces sync.Map // walletAddress -> nonceEntry
 	}
 
 	usersHandler struct {
@@ -75,27 +77,25 @@ type (
 )
 
 func init() {
-
-	// Provide dependencies during app boot
 	app.HookBoot.Listen(func(e hooks.Event[*do.Injector]) {
 		do.Provide(e.Msg, NewUsersService)
 		do.Provide(e.Msg, NewUsersHandler)
 	})
 
-	// Register routes during router build
 	web.HookBuildRouter.Listen(func(e hooks.Event[*mux.Router]) {
 		h := do.MustInvoke[Handler](do.DefaultInjector)
+		mw := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
 
-		middleware := do.MustInvoke[middleware.Middleware](do.DefaultInjector)
 		authenticatedHandler := e.Msg.NewRoute().Subrouter()
-		authenticatedHandler.Use(middleware.AuthMiddleware)
+		authenticatedHandler.Use(mw.AuthMiddleware)
 
 		authenticatedHandler.HandleFunc("/users", h.Update).Methods(http.MethodPut)
 		authenticatedHandler.HandleFunc("/users", h.Delete).Methods(http.MethodDelete)
 		authenticatedHandler.HandleFunc("/users/me", h.Me).Methods(http.MethodGet)
+		authenticatedHandler.HandleFunc("/users/refresh", h.Refresh).Methods(http.MethodPost)
 
-		e.Msg.HandleFunc("/users", h.Create).Methods(http.MethodPost)
-		e.Msg.HandleFunc("/users/login", h.Login).Methods(http.MethodPost)
-		e.Msg.HandleFunc("/users/verify-email", h.Verify).Methods(http.MethodGet)
+		// Public SIWE endpoints
+		e.Msg.HandleFunc("/auth/nonce", h.Nonce).Methods(http.MethodPost)
+		e.Msg.HandleFunc("/auth/verify", h.Verify).Methods(http.MethodPost)
 	})
 }

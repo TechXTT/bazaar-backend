@@ -56,28 +56,43 @@ type (
 		POSTGRES_USER     string
 		POSTGRES_PASSWORD string
 		POSTGRES_DB       string
+		POSTGRES_SSLMODE  string
 	}
 
 	AppConfig struct {
-		Name    string
-		Timeout time.Duration
+		Name        string
+		Timeout     time.Duration
+		BackendURL  string
+		FrontendURL string
 	}
 
 	JWTConfig struct {
 		JwksUri    string
 		PrivateKey string
 		PublicKey  string
+		DevKeyFile string
 	}
 
 	WsConfig struct {
-		ETH_URL         string
-		ContractAddress string
+		ETH_URL          string
+		ContractAddress  string
+		KlerosCourtURL   string
+		BackfillOnStartup bool
+		BackfillFromBlock uint64
+		BackfillBatchSize int
 	}
 
 	S3SpacesConfig struct {
-		SpacesKey    string
-		SpacesSecret string
-		SpacesName   string
+		SpacesKey      string
+		SpacesSecret   string
+		SpacesName     string
+		SpacesEndpoint string
+		SpacesCDNBase  string
+		SpacesRegion   string
+		StorageDriver  string
+		LocalUploadDir string
+		PinataJWT      string
+		IPFSGateway    string
 	}
 )
 
@@ -104,7 +119,8 @@ func NewConfig(i *do.Injector) (Config, error) {
 	allowedHeadersList := strings.Split(allowedHeaders, ",")
 	exposedHeaders := os.Getenv("HTTP_EXPOSED_HEADERS")
 	exposedHeadersList := strings.Split(exposedHeaders, ",")
-	allowCredentials, _ := strconv.ParseBool(os.Getenv("HTTP_ALLOW_CREDENTIALS"))
+	allowCredentialsRaw := getEnv("HTTP_ALLOW_CREDENTIALS", os.Getenv("HTTP_ALLOWED_CREDENTIALS"))
+	allowCredentials, _ := strconv.ParseBool(allowCredentialsRaw)
 
 	cfg.HTTP = HTTPConfig{
 		Hostname:         os.Getenv("HTTP_HOSTNAME"),
@@ -127,34 +143,61 @@ func NewConfig(i *do.Injector) (Config, error) {
 		POSTGRES_USER:     os.Getenv("POSTGRES_USER"),
 		POSTGRES_PASSWORD: os.Getenv("POSTGRES_PASSWORD"),
 		POSTGRES_DB:       os.Getenv("POSTGRES_DB"),
+		POSTGRES_SSLMODE:  getEnv("POSTGRES_SSLMODE", "disable"),
 	}
 
 	timeout, _ := time.ParseDuration(os.Getenv("APP_TIMEOUT"))
 
 	cfg.App = AppConfig{
-		Name:    os.Getenv("APP_NAME"),
-		Timeout: timeout,
+		Name:        os.Getenv("APP_NAME"),
+		Timeout:     timeout,
+		BackendURL:  getEnv("APP_BACKEND_URL", "http://localhost:8000"),
+		FrontendURL: getEnv("APP_FRONTEND_URL", "http://localhost:3000"),
 	}
 
 	cfg.JWT = JWTConfig{
 		JwksUri:    os.Getenv("JWKS_URI"),
 		PrivateKey: os.Getenv("PRIVATE_KEY"),
 		PublicKey:  os.Getenv("PUBLIC_KEY"),
+		DevKeyFile: getEnv("JWT_DEV_KEY_FILE", ".dev/jwt-dev.pem"),
 	}
 
+	backfillFromBlock, _ := strconv.ParseUint(os.Getenv("CONTRACT_DEPLOY_BLOCK"), 10, 64)
+	backfillBatchSize, _ := strconv.Atoi(getEnv("BACKFILL_BATCH_SIZE", "10000"))
+	backfillOnStartup, _ := strconv.ParseBool(os.Getenv("BACKFILL_ON_STARTUP"))
+
 	cfg.Ws = WsConfig{
-		ETH_URL:         os.Getenv("ETH_URL"),
-		ContractAddress: os.Getenv("CONTRACT_ADDRESS"),
+		ETH_URL:           os.Getenv("ETH_URL"),
+		ContractAddress:   os.Getenv("CONTRACT_ADDRESS"),
+		KlerosCourtURL:    getEnv("KLEROS_COURT_URL", "https://resolve.kleros.io"),
+		BackfillOnStartup: backfillOnStartup,
+		BackfillFromBlock: backfillFromBlock,
+		BackfillBatchSize: backfillBatchSize,
 	}
 
 	cfg.S3Spaces = S3SpacesConfig{
-		SpacesKey:    os.Getenv("SPACES_KEY"),
-		SpacesSecret: os.Getenv("SPACES_SECRET"),
-		SpacesName:   os.Getenv("SPACES_NAME"),
+		SpacesKey:      os.Getenv("SPACES_KEY"),
+		SpacesSecret:   os.Getenv("SPACES_SECRET"),
+		SpacesName:     os.Getenv("SPACES_NAME"),
+		SpacesEndpoint: getEnv("SPACES_ENDPOINT", "https://fra1.digitaloceanspaces.com"),
+		SpacesCDNBase:  os.Getenv("SPACES_CDN_BASE"),
+		SpacesRegion:   getEnv("SPACES_REGION", "us-east-1"),
+		StorageDriver:  getEnv("STORAGE_DRIVER", "s3"),
+		LocalUploadDir: getEnv("LOCAL_UPLOAD_DIR", "uploads"),
+		PinataJWT:      os.Getenv("PINATA_JWT"),
+		IPFSGateway:    getEnv("IPFS_GATEWAY", "https://ipfs.io"),
 	}
 
 	return &cfg, nil
 
+}
+
+func getEnv(key string, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func (c *Base) GetHTTP() HTTPConfig {

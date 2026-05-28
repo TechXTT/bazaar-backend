@@ -21,6 +21,9 @@ type (
 		// GetStore returns a store by id
 		GetStore(id string) (*Stores, error)
 
+		// GetStoreReputation returns reputation for a store's owner
+		GetStoreReputation(id string) (*db.SellerReputation, error)
+
 		// CreateStore creates a new store
 		CreateStore(userId string, s *Stores) error
 
@@ -32,8 +35,6 @@ type (
 
 		// GetUserStores returns all stores for a user
 		GetUserStores(userId string) ([]Stores, error)
-
-		// TODO: Add methods for products and categories
 	}
 
 	// Handler provides the stores handlers
@@ -44,6 +45,9 @@ type (
 
 		// Get handles a request to get a store
 		Get(w http.ResponseWriter, r *http.Request)
+
+		// GetReputation handles a request to get a store's reputation
+		GetReputation(w http.ResponseWriter, r *http.Request)
 
 		// Create handles a request to create a new store
 		Create(w http.ResponseWriter, r *http.Request)
@@ -84,6 +88,7 @@ func init() {
 
 		authenticatedHandler.HandleFunc("/stores/user", h.GetUser).Methods("GET")
 
+		e.Msg.HandleFunc("/stores/{id}/reputation", h.GetReputation).Methods("GET")
 		e.Msg.HandleFunc("/stores/{id}", h.Get).Methods("GET")
 		e.Msg.HandleFunc("/stores", h.Gets).Methods("GET")
 

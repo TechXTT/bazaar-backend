@@ -1,237 +1,139 @@
 package users
 
 import (
-	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
-	"fmt"
-	"regexp"
+	"strings"
+	"time"
 
-	"github.com/TechXTT/bazaar-backend/modules/users/pkg/email"
-	"github.com/TechXTT/bazaar-backend/modules/users/pkg/passwords"
+	siwe "github.com/spruceid/siwe-go"
+
 	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
 )
 
+const nonceTTL = 5 * time.Minute
+
 // NewUsersService creates a new users service
 func NewUsersService(i *do.Injector) (Service, error) {
-	db := do.MustInvoke[db.DB](i)
+	dbSvc := do.MustInvoke[db.DB](i)
 	jwks := do.MustInvoke[jwt.Jwks](i)
 	cfg := do.MustInvoke[config.Config](i)
 
 	return &usersService{
-		db:   db,
+		db:   dbSvc,
 		jwks: jwks,
 		cfg:  cfg,
 	}, nil
 }
 
-func (u *usersService) CreateUser(user *Users) error {
-
-	if err := u.save(user); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *usersService) UpdateUser(id string, user *Users) error {
-
-	if user.WalletAddress != "" {
-		if err := u.validateAddress(user.WalletAddress); err != nil {
-			return err
-		}
-	}
-
-	if err := u.update(uuid.FromStringOrNil(id), user); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *usersService) DeleteUser(id string) error {
-	user, err := u.GetMe(id)
-	if err != nil {
-		return err
-	}
-
-	if err := u.delete(user); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (u *usersService) GetMe(id string) (*Users, error) {
-	user := u.load(uuid.FromStringOrNil(id))
-
-	if user.ID != uuid.Nil {
-		return &user, nil
-	}
-
-	return nil, errors.New("user not found")
-}
-
-func (u *usersService) LoginUser(email string, password string) (string, error) {
-	user := u.loadByEmail(email)
-
-	if user.ID != uuid.Nil {
-		err := passwords.ComparePassword(user.Password, password)
-		if err != nil {
-			return "", err
-		}
-
-		token, err := u.jwks.GenerateToken(user.ID.String())
-		if err != nil {
-			return "", err
-		}
-
-		return token, nil
-	}
-
-	return "", errors.New("user not found")
-}
-
-func (u *usersService) VerifyUser(token string) error {
-	id, err := u.jwks.ValidateToken(token)
-	if err != nil {
-		return err
-	}
-
-	user := u.load(uuid.FromStringOrNil(id))
-
-	if user.ID != uuid.Nil {
-		user.EmailVerified = true
-		err := u.update(user.ID, &user)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	return errors.New("user not found")
-}
-
-func (u *usersService) load(userId uuid.UUID) Users {
-	db := u.db.DB()
-
-	var user Users
-
-	result := db.Where("id = ?", userId).First(&user)
-	if result.Error != nil {
-		return Users{}
-	}
-
-	return user
-}
-
-func (u *usersService) loadByEmail(email string) Users {
-	db := u.db.DB()
-
-	var user Users
-
-	result := db.Where("email = ?", email).First(&user)
-	if result.Error != nil {
-		return Users{}
-	}
-
-	return user
-}
-
-func (u *usersService) save(user *Users) error {
-	db := u.db.DB()
-
-	existingUser := Users{}
-	result := db.Model(&Users{}).Where("email = ?", user.Email).First(&existingUser)
-	if result.RowsAffected == 1 {
-		return errors.New("user already exists")
-	}
-
-	hashedPassword, err := passwords.HashPassword(user.Password)
-	if err != nil {
-		return err
-	}
-
-	user.Password = hashedPassword
-
-	result = db.Save(&user)
-	if result.Error != nil {
-		return result.Error
-	}
-
-	verificationLink, err := u.generateEmailVerificationLink(user.ID)
-	if err != nil {
-		db.Delete(&user)
-		return err
-	}
-
-	err = email.SendEmailVerification(user.Email, user.FirstName, verificationLink)
-	if err != nil {
-		db.Delete(&user)
-		return err
-	}
-
-	return nil
-}
-
-func (u *usersService) delete(user *Users) error {
-	db := u.db.DB()
-
-	result := db.Delete(&user)
-	if result.Error != nil {
-		return result.Error
-	}
-
-	return nil
-}
-
-func (u *usersService) update(id uuid.UUID, user *Users) error {
-	db := u.db.DB()
-
-	result := db.Model(&user).Omit("email", "password").Where("id = ?", id).Updates(user)
-	if result.Error != nil {
-		return result.Error
-	}
-
-	return nil
-}
-
-func (u *usersService) generateEmailVerificationLink(id uuid.UUID) (string, error) {
-	token, err := u.jwks.GenerateToken(id.String())
-	if err != nil {
+func (u *usersService) GetNonce(walletAddress string) (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
+	nonce := hex.EncodeToString(b)
 
-	return fmt.Sprintf("http://localhost:8000/api/users/verify-email?token=%s", token), nil
+	u.nonces.Store(strings.ToLower(walletAddress), nonceEntry{
+		nonce:     nonce,
+		expiresAt: time.Now().Add(nonceTTL),
+	})
+
+	return nonce, nil
 }
 
-func (u *usersService) validateAddress(address string) error {
-	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
-
-	if !re.MatchString(address) {
-		return errors.New("invalid address")
-	}
-
-	client, err := ethclient.Dial(u.cfg.GetWs().ETH_URL)
+func (u *usersService) VerifySIWE(message string, signature string) (string, *Users, error) {
+	parsed, err := siwe.ParseMessage(message)
 	if err != nil {
-		return err
+		return "", nil, errors.New("invalid SIWE message")
 	}
 
-	commonAddress := common.HexToAddress(address)
-	bytecode, err := client.CodeAt(context.Background(), commonAddress, nil)
+	addr := strings.ToLower(parsed.GetAddress().Hex())
+
+	raw, ok := u.nonces.Load(addr)
+	if !ok {
+		return "", nil, errors.New("nonce not found; request a new nonce first")
+	}
+	entry := raw.(nonceEntry)
+	if time.Now().After(entry.expiresAt) {
+		u.nonces.Delete(addr)
+		return "", nil, errors.New("nonce expired")
+	}
+	if parsed.GetNonce() != entry.nonce {
+		return "", nil, errors.New("nonce mismatch")
+	}
+
+	_, err = parsed.Verify(signature, nil, &entry.nonce, nil)
 	if err != nil {
-		return err
+		return "", nil, errors.New("signature verification failed")
 	}
 
-	if len(bytecode) > 0 {
-		return errors.New("invalid address")
+	// Nonce is single-use
+	u.nonces.Delete(addr)
+
+	user, err := u.upsertWallet(addr)
+	if err != nil {
+		return "", nil, err
 	}
 
-	return nil
+	token, err := u.jwks.GenerateToken(addr)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return token, user, nil
+}
+
+func (u *usersService) GetMe(walletAddress string) (*Users, error) {
+	gormDB := u.db.DB()
+	var user Users
+	if err := gormDB.Where("wallet_address = ?", walletAddress).First(&user).Error; err != nil {
+		return nil, errors.New("user not found")
+	}
+	return &user, nil
+}
+
+func (u *usersService) UpdateUser(walletAddress string, updated *Users) error {
+	gormDB := u.db.DB()
+	return gormDB.Model(&Users{}).
+		Where("wallet_address = ?", walletAddress).
+		Updates(map[string]interface{}{
+			"first_name": updated.FirstName,
+			"last_name":  updated.LastName,
+		}).Error
+}
+
+func (u *usersService) DeleteUser(walletAddress string) error {
+	gormDB := u.db.DB()
+	return gormDB.Where("wallet_address = ?", walletAddress).Delete(&Users{}).Error
+}
+
+func (u *usersService) RefreshToken(walletAddress string) (string, error) {
+	if _, err := u.GetMe(walletAddress); err != nil {
+		return "", err
+	}
+	return u.jwks.GenerateToken(walletAddress)
+}
+
+func (u *usersService) upsertWallet(walletAddress string) (*Users, error) {
+	gormDB := u.db.DB()
+
+	var user Users
+	result := gormDB.Where("wallet_address = ?", walletAddress).First(&user)
+	if result.Error != nil {
+		// First-time sign-in: create the record
+		user = Users{WalletAddress: walletAddress}
+		if err := gormDB.Create(&user).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	now := time.Now()
+	user.LastLoginAt = &now
+	gormDB.Save(&user)
+
+	return &user, nil
 }

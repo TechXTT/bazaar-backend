@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
 	"github.com/samber/do"
 )
 
@@ -14,94 +15,102 @@ func NewUsersHandler(i *do.Injector) (Handler, error) {
 	}, nil
 }
 
-func (u *usersHandler) Create(w http.ResponseWriter, r *http.Request) {
-	user := &Users{}
-	if err := json.NewDecoder(r.Body).Decode(user); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+func (u *usersHandler) Nonce(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		WalletAddress string `json:"walletAddress"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.WalletAddress == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "walletAddress is required")
 		return
 	}
 
-	if err := u.svc.CreateUser(user); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	nonce, err := u.svc.GetNonce(body.WalletAddress)
+	if err != nil {
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	httpjson.WriteJSON(w, http.StatusOK, map[string]string{"nonce": nonce})
+}
+
+func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Message   string `json:"message"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.Message == "" || body.Signature == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "message and signature are required")
+		return
+	}
+
+	token, user, err := u.svc.VerifySIWE(body.Message, body.Signature)
+	if err != nil {
+		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	httpjson.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"token": token,
+		"user":  user,
+	})
 }
 
 func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
-	user_id := r.Header.Get("user_id")
+	walletAddress := r.Header.Get("user_id") // header holds wallet address after Phase 2
 
-	user := &Users{}
-	if err := json.NewDecoder(r.Body).Decode(user); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	var body Users
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if err := u.svc.UpdateUser(user_id, user); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := u.svc.UpdateUser(walletAddress, &body); err != nil {
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
 
 func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	user_id := r.Header.Get("user_id")
+	walletAddress := r.Header.Get("user_id")
 
-	if err := u.svc.DeleteUser(user_id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if err := u.svc.DeleteUser(walletAddress); err != nil {
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 }
 
 func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
-	user_id := r.Header.Get("user_id")
+	walletAddress := r.Header.Get("user_id")
 
-	user, err := u.svc.GetMe(user_id)
+	user, err := u.svc.GetMe(walletAddress)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	user.Password = ""
-	user.Address = ""
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(user)
+	httpjson.WriteJSON(w, http.StatusOK, user)
 }
 
-func (u *usersHandler) Login(w http.ResponseWriter, r *http.Request) {
-	creds := &Credentials{}
-	if err := json.NewDecoder(r.Body).Decode(creds); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func (u *usersHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	walletAddress := r.Header.Get("user_id")
 
-	token, err := u.svc.LoginUser(creds.Email, creds.Password)
+	token, err := u.svc.RefreshToken(walletAddress)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"token": token})
-}
-
-func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	vars := r.URL.Query()
-
-	token := vars.Get("token")
-
-	if err := u.svc.VerifyUser(token); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	http.Redirect(w, r, "http://localhost:3000", http.StatusSeeOther)
+	httpjson.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
 }

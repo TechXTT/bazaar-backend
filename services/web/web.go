@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
@@ -42,6 +43,12 @@ func NewWeb(i *do.Injector) (Web, error) {
 }
 
 func (w *web) buildRouter() {
+	uploadDir := w.cfg.GetS3Spaces().LocalUploadDir
+	if uploadDir != "" {
+		w.handler.PathPrefix("/uploads/").Handler(
+			http.StripPrefix("/api/uploads/", http.FileServer(http.Dir(uploadDir))),
+		).Methods(http.MethodGet)
+	}
 
 	w.handler.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -55,7 +62,7 @@ func (w *web) Start() error {
 	httpCfg := w.cfg.GetHTTP()
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   w.cfg.GetHTTP().AllowedOrigins,
+		AllowedOrigins:   nonEmptyList(w.cfg.GetHTTP().AllowedOrigins),
 		AllowedMethods:   w.cfg.GetHTTP().AllowedMethods,
 		AllowedHeaders:   w.cfg.GetHTTP().AllowedHeaders,
 		AllowCredentials: w.cfg.GetHTTP().AllowCredentials,
@@ -73,4 +80,15 @@ func (w *web) Start() error {
 	}
 
 	return srv.ListenAndServe()
+}
+
+func nonEmptyList(values []string) []string {
+	filtered := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			filtered = append(filtered, value)
+		}
+	}
+	return filtered
 }
