@@ -79,7 +79,8 @@ func (u *usersService) VerifySIWE(message string, signature string) (string, *Us
 		return "", nil, err
 	}
 
-	token, err := u.jwks.GenerateToken(addr)
+	// Store user UUID (not wallet address) so all service lookups work by UUID.
+	token, err := u.jwks.GenerateToken(user.ID.String())
 	if err != nil {
 		return "", nil, err
 	}
@@ -87,35 +88,35 @@ func (u *usersService) VerifySIWE(message string, signature string) (string, *Us
 	return token, user, nil
 }
 
-func (u *usersService) GetMe(walletAddress string) (*Users, error) {
+func (u *usersService) GetMe(userID string) (*Users, error) {
 	gormDB := u.db.DB()
 	var user Users
-	if err := gormDB.Where("wallet_address = ?", walletAddress).First(&user).Error; err != nil {
+	if err := gormDB.Where("id = ?", userID).First(&user).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 	return &user, nil
 }
 
-func (u *usersService) UpdateUser(walletAddress string, updated *Users) error {
+func (u *usersService) UpdateUser(userID string, updated *Users) error {
 	gormDB := u.db.DB()
 	return gormDB.Model(&Users{}).
-		Where("wallet_address = ?", walletAddress).
+		Where("id = ?", userID).
 		Updates(map[string]interface{}{
 			"first_name": updated.FirstName,
 			"last_name":  updated.LastName,
 		}).Error
 }
 
-func (u *usersService) DeleteUser(walletAddress string) error {
+func (u *usersService) DeleteUser(userID string) error {
 	gormDB := u.db.DB()
-	return gormDB.Where("wallet_address = ?", walletAddress).Delete(&Users{}).Error
+	return gormDB.Where("id = ?", userID).Delete(&Users{}).Error
 }
 
-func (u *usersService) RefreshToken(walletAddress string) (string, error) {
-	if _, err := u.GetMe(walletAddress); err != nil {
+func (u *usersService) RefreshToken(userID string) (string, error) {
+	if _, err := u.GetMe(userID); err != nil {
 		return "", err
 	}
-	return u.jwks.GenerateToken(walletAddress)
+	return u.jwks.GenerateToken(userID)
 }
 
 func (u *usersService) upsertWallet(walletAddress string) (*Users, error) {
