@@ -9,11 +9,11 @@ import (
 
 type Users struct {
 	gorm.Model
-	ID            uuid.UUID  `gorm:"primaryKey" json:"id"`
-	FirstName     string     `json:"first_name"`
-	LastName      string     `json:"last_name"`
-	WalletAddress string     `gorm:"uniqueIndex;not null" json:"wallet_address"`
-	LastLoginAt   *time.Time `json:"last_login_at"`
+	ID            uuid.UUID  `gorm:"primaryKey" json:"ID"`
+	FirstName     string     `json:"FirstName"`
+	LastName      string     `json:"LastName"`
+	WalletAddress string     `gorm:"uniqueIndex;not null" json:"WalletAddress"`
+	LastLoginAt   *time.Time `json:"LastLoginAt,omitempty"`
 }
 
 func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
