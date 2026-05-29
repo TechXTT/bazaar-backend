@@ -84,6 +84,10 @@ func NewDB(i *do.Injector) (DB, error) {
 		}
 	}
 
+	// Drop legacy columns that were removed from the models
+	conn.Exec("ALTER TABLE users DROP COLUMN IF EXISTS password")
+	conn.Exec("ALTER TABLE users DROP COLUMN IF EXISTS email")
+
 	return &db{cfg: cfg, conn: conn}, nil
 }
 
