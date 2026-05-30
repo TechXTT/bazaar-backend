@@ -15,8 +15,9 @@ import (
 type (
 	// Service exposes read-only views over on-chain dispute data indexed by the observer.
 	Service interface {
-		// ListDisputes returns all disputes where the caller is buyer or receiver.
-		ListDisputes(walletAddress string) ([]Disputes, error)
+		// ListDisputes returns all disputes where the caller (identified by user UUID)
+		// is the order's buyer or owns the store the ordered product belongs to.
+		ListDisputes(userID string) ([]Disputes, error)
 
 		// GetDispute returns a single dispute with evidence for the given orderId.
 		GetDispute(walletAddress string, orderId string) (*Disputes, error)

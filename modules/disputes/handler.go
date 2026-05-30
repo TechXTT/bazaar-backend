@@ -16,9 +16,9 @@ func NewDisputesHandler(i *do.Injector) (Handler, error) {
 }
 
 func (d *disputesHandler) GetDisputes(w http.ResponseWriter, r *http.Request) {
-	walletAddress := r.Header.Get("user_id")
+	userID := r.Header.Get("user_id")
 
-	disputes, err := d.svc.ListDisputes(walletAddress)
+	disputes, err := d.svc.ListDisputes(userID)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return

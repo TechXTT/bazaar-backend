@@ -13,15 +13,18 @@ func NewDisputesService(i *do.Injector) (Service, error) {
 	return &disputesService{db: dbSvc}, nil
 }
 
-func (s *disputesService) ListDisputes(walletAddress string) ([]Disputes, error) {
+func (s *disputesService) ListDisputes(userID string) ([]Disputes, error) {
 	gormDB := s.db.DB()
 
+	// userID is the authenticated user's UUID (the JWT subject set on the
+	// "user_id" header), not a wallet address. Return disputes where the caller
+	// is the order's buyer or owns the store the ordered product belongs to.
 	var disputes []Disputes
 	err := gormDB.
 		Preload("Evidence").
 		Joins("JOIN orders ON disputes.order_id = orders.id").
-		Where("orders.buyer_id IN (SELECT id FROM users WHERE wallet_address = ?) OR orders.buyer_id IN (SELECT id FROM users WHERE wallet_address = ?)",
-			walletAddress, walletAddress).
+		Where("orders.buyer_id = ? OR orders.product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))",
+			userID, userID).
 		Order("disputes.created_at desc").
 		Find(&disputes).Error
 	if err != nil {
