@@ -171,17 +171,14 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 
 	products, err := s.svc.GetProductsFromStore(storeId, cursor, limit)
 	if err != nil {
-		if err.Error() == "no products found" {
-			httpjson.WriteError(w, http.StatusNotFound, err.Error())
-			return
-		} else {
-			httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("next-cursor", products[len(products)-1].CreatedAt.String())
+	if len(products) > 0 {
+		w.Header().Set("next-cursor", products[len(products)-1].CreatedAt.String())
+	}
 
 	if err := json.NewEncoder(w).Encode(products); err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())

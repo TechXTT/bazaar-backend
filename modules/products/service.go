@@ -95,10 +95,6 @@ func (p *productsService) GetProductsFromStore(storeId string, cursor string, li
 
 	db.Preload(clause.Associations).Find(&products)
 
-	if len(products) == 0 {
-		return nil, errors.New("no products found")
-	}
-
 	return products, nil
 }
 
