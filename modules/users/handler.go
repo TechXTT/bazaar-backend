@@ -64,7 +64,7 @@ func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
-	walletAddress := r.Header.Get("user_id") // header holds wallet address after Phase 2
+	userID := r.Header.Get("user_id")
 
 	var body Users
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -72,7 +72,7 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := u.svc.UpdateUser(walletAddress, &body); err != nil {
+	if err := u.svc.UpdateUser(userID, &body); err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -81,9 +81,9 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	walletAddress := r.Header.Get("user_id")
+	userID := r.Header.Get("user_id")
 
-	if err := u.svc.DeleteUser(walletAddress); err != nil {
+	if err := u.svc.DeleteUser(userID); err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -92,9 +92,9 @@ func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
-	walletAddress := r.Header.Get("user_id")
+	userID := r.Header.Get("user_id")
 
-	user, err := u.svc.GetMe(walletAddress)
+	user, err := u.svc.GetMe(userID)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
 		return
@@ -104,9 +104,9 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	walletAddress := r.Header.Get("user_id")
+	userID := r.Header.Get("user_id")
 
-	token, err := u.svc.RefreshToken(walletAddress)
+	token, err := u.svc.RefreshToken(userID)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
 		return
