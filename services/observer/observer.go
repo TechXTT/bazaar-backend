@@ -218,11 +218,11 @@ func (o *observer) handleOrderCreated(vLog types.Log, contractABI abi.ABI) {
 
 	now := time.Now()
 	updates := map[string]interface{}{
-		"status":             db.OrderStatusPending,
-		"tx_hash":            vLog.TxHash.Hex(),
-		"token":              tokenLabel(ev.Token),
+		"status":              db.OrderStatusPending,
+		"tx_hash":             vLog.TxHash.Hex(),
+		"token":               tokenLabel(ev.Token),
 		"on_chain_product_id": bytes32ToHex(ev.ProductId),
-		"updated_at":         now,
+		"updated_at":          now,
 	}
 
 	if order.ID == uuid.Nil {
@@ -360,10 +360,12 @@ func (o *observer) handleDisputeRaised(vLog types.Log, contractABI abi.ABI) {
 		LogIndex: uint(vLog.Index),
 	}
 
-	gormDB.Clauses(clause.OnConflict{
+	if err := gormDB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "order_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"raised_by", "status", "tx_hash", "log_index"}),
-	}).Create(&dispute)
+	}).Create(&dispute).Error; err != nil {
+		log.Println("observer: failed to upsert dispute for order", order.ID, ":", err)
+	}
 }
 
 func (o *observer) handleDisputeResolved(vLog types.Log, contractABI abi.ABI) {

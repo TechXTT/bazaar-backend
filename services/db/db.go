@@ -88,6 +88,20 @@ func NewDB(i *do.Injector) (DB, error) {
 	conn.Exec("ALTER TABLE users DROP COLUMN IF EXISTS password")
 	conn.Exec("ALTER TABLE users DROP COLUMN IF EXISTS email")
 
+	// The Disputes model declares `order_id` as a uniqueIndex, but AutoMigrate will
+	// not upgrade a pre-existing non-unique index in place. Without the unique
+	// constraint the observer's `ON CONFLICT (order_id)` upsert fails (SQLSTATE
+	// 42P10), leaving orders marked "disputed" with no dispute row. Ensure the
+	// unique index exists: drop the legacy non-unique one, dedupe, then create it.
+	conn.Exec("DROP INDEX IF EXISTS idx_disputes_order_id")
+	conn.Exec(`DELETE FROM disputes a USING disputes b
+		WHERE a.order_id = b.order_id AND a.ctid < b.ctid`)
+	if err := conn.Exec(
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_disputes_order_id ON disputes (order_id)",
+	).Error; err != nil {
+		log.Printf("warning: could not ensure unique index on disputes.order_id: %v", err)
+	}
+
 	return &db{cfg: cfg, conn: conn}, nil
 }
 
