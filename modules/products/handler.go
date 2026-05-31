@@ -2,6 +2,7 @@ package products
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,6 +12,22 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
 )
+
+// statusForError maps service sentinel errors to HTTP status codes.
+func statusForError(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrUnauthorized):
+		return http.StatusForbidden
+	case errors.Is(err, ErrConflict):
+		return http.StatusConflict
+	case errors.Is(err, ErrInvalidInput):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
 
 type (
 	DataRequest struct {
@@ -53,7 +70,7 @@ func (s *productsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	product, err := s.svc.GetProduct(productId)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -94,7 +111,7 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	id, err := s.svc.CreateProduct(userId, product)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -109,7 +126,7 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	product.ImageURL = imageURL
 
 	if err := s.svc.UpdateProduct(userId, id, product); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -130,7 +147,7 @@ func (s *productsHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.UpdateProduct(userId, productId, product); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -145,7 +162,7 @@ func (s *productsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	productId := vars["id"]
 
 	if err := s.svc.DeleteProduct(userId, productId); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -196,10 +213,9 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Assign the returned values from s.svc.CreateOrders to separate variables
 	orderIds, err := s.svc.CreateOrders(userId, orders.Data)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -229,7 +245,7 @@ func (s *productsHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := s.svc.GetOrder(userId, orderId)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 

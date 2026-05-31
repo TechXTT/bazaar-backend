@@ -30,17 +30,17 @@ type (
 		// VerifySIWE verifies a SIWE message+signature and returns a JWT
 		VerifySIWE(message string, signature string) (string, *Users, error)
 
-		// UpdateUser updates display name fields for the authenticated wallet
-		UpdateUser(walletAddress string, u *Users) error
+		// UpdateUser updates display name fields for the user identified by UUID
+		UpdateUser(userID string, u *Users) error
 
-		// DeleteUser removes the user identified by walletAddress
-		DeleteUser(walletAddress string) error
+		// DeleteUser removes the user identified by UUID
+		DeleteUser(userID string) error
 
-		// GetMe returns the user for the given wallet address (from JWT subject)
-		GetMe(walletAddress string) (*Users, error)
+		// GetMe returns the user for the given UUID (the JWT subject)
+		GetMe(userID string) (*Users, error)
 
-		// RefreshToken issues a fresh JWT for an already-authenticated wallet
-		RefreshToken(walletAddress string) (string, error)
+		// RefreshToken issues a fresh JWT for an already-authenticated user (by UUID)
+		RefreshToken(userID string) (string, error)
 	}
 
 	// Handler provides the users HTTP handlers

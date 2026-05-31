@@ -2,12 +2,29 @@ package stores
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
 )
+
+// statusForError maps service sentinel errors to HTTP status codes.
+func statusForError(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, ErrUnauthorized):
+		return http.StatusForbidden
+	case errors.Is(err, ErrConflict):
+		return http.StatusConflict
+	case errors.Is(err, ErrInvalidInput):
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
+}
 
 // NewStoresHandler creates a new users handler
 func NewStoresHandler(i *do.Injector) (Handler, error) {
@@ -37,7 +54,7 @@ func (s *storesHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	store, err := s.svc.GetStore(storeId)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -52,7 +69,7 @@ func (s *storesHandler) GetReputation(w http.ResponseWriter, r *http.Request) {
 
 	rep, err := s.svc.GetStoreReputation(storeId)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusNotFound, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -71,7 +88,7 @@ func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.CreateStore(userId, store); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -93,7 +110,7 @@ func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.UpdateStore(userId, storeId, store); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 
@@ -108,7 +125,7 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	storeId := vars["id"]
 
 	if err := s.svc.DeleteStore(userId, storeId); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteError(w, statusForError(err), err.Error())
 		return
 	}
 

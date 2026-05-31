@@ -13,6 +13,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/samber/do"
+	"gorm.io/gorm"
 )
 
 const nonceTTL = 5 * time.Minute
@@ -92,7 +93,10 @@ func (u *usersService) GetMe(userID string) (*Users, error) {
 	gormDB := u.db.DB()
 	var user Users
 	if err := gormDB.Where("id = ?", userID).First(&user).Error; err != nil {
-		return nil, errors.New("user not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("user not found")
+		}
+		return nil, err
 	}
 	return &user, nil
 }

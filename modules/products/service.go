@@ -2,6 +2,7 @@ package products
 
 import (
 	"errors"
+	"fmt"
 	"mime/multipart"
 	"strings"
 
@@ -10,7 +11,16 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/s3spaces"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+)
+
+// Sentinel errors so handlers can map service failures to HTTP statuses.
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrConflict     = errors.New("already exists")
+	ErrInvalidInput = errors.New("invalid input")
 )
 
 type OrderResponse struct {
@@ -32,19 +42,23 @@ func NewProductsService(i *do.Injector) (Service, error) {
 }
 
 func (p *productsService) GetProducts() ([]Products, error) {
-	products := p.loads()
-
+	var products []Products
+	if err := p.db.DB().Joins("Store").Find(&products).Error; err != nil {
+		return nil, err
+	}
 	return products, nil
 }
 
 func (p *productsService) GetProduct(id string) (*Products, error) {
-	product := p.load(uuid.FromStringOrNil(id))
-
-	if product.ID != uuid.Nil {
-		return &product, nil
+	var product Products
+	err := p.db.DB().Joins("Store").Where("products.id = ?", uuid.FromStringOrNil(id)).First(&product).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
-
-	return nil, errors.New("product not found")
+	return &product, nil
 }
 
 func (p *productsService) CreateProduct(userId string, product *Products) (string, error) {
@@ -93,7 +107,9 @@ func (p *productsService) GetProductsFromStore(storeId string, cursor string, li
 		db = db.Where("store_id = ?", storeId).Where("created_at < ?", cursor).Limit(limit).Order("created_at desc")
 	}
 
-	db.Preload(clause.Associations).Find(&products)
+	if err := db.Preload(clause.Associations).Find(&products).Error; err != nil {
+		return nil, err
+	}
 
 	return products, nil
 }
@@ -121,17 +137,17 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 	for _, orderData := range ordersData {
 		product, ok := productByID[orderData.ProductID]
 		if !ok {
-			return nil, errors.New("product not found")
+			return nil, ErrNotFound
 		}
 
 		owner := product.Store.Owner
 
 		if owner.WalletAddress == "" {
-			return nil, errors.New("owner wallet address not found")
+			return nil, fmt.Errorf("%w: owner wallet address not found", ErrInvalidInput)
 		}
 
 		if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
-			return nil, errors.New("owner and buyer cannot be the same")
+			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
 		}
 
 		order := Orders{
@@ -142,7 +158,7 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 		order.CreatedAt = orderData.CreatedAt
 
 		if owner.ID == order.BuyerID {
-			return nil, errors.New("owner and buyer cannot be the same")
+			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
 		}
 
 		order.Total = float64(order.Quantity) * product.Price
@@ -169,12 +185,16 @@ func (p *productsService) GetOrders(userId string, filter string) ([]Orders, err
 	db := p.db.DB()
 
 	var orders []Orders
+	var err error
 	if filter == "receiving" {
-		db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders)
+		err = db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders).Error
 	} else if filter == "sending" {
-		db.Preload("Product").Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId).Find(&orders)
+		err = db.Preload("Product").Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId).Find(&orders).Error
 	} else {
-		db.Preload("Product").Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId).Find(&orders)
+		err = db.Preload("Product").Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId).Find(&orders).Error
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return orders, nil
@@ -189,12 +209,15 @@ func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
 
 	order := Orders{}
 	if err := db.Preload("Product.Store").Where("orders.id = ?", id).First(&order).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 
 	requesterID := uuid.FromStringOrNil(userId)
 	if order.BuyerID != requesterID && order.Product.Store.OwnerID != requesterID {
-		return nil, errors.New("unauthorized")
+		return nil, ErrUnauthorized
 	}
 
 	return &order, nil
@@ -214,12 +237,6 @@ func toAlgoliaRecord(p Products) algolia.ProductRecord {
 	}
 }
 
-func (p *productsService) loads() []Products {
-	var products []Products
-	p.db.DB().Joins("Store").Find(&products)
-	return products
-}
-
 func (p *productsService) load(productId uuid.UUID) Products {
 	var product Products
 	p.db.DB().Joins("Store").Where("products.id = ?", productId).First(&product)
@@ -232,17 +249,17 @@ func (p *productsService) save(userId uuid.UUID, product *Products) (string, err
 	existingProduct := Products{}
 	result := db.Where("name = ?", product.Name).First(&existingProduct)
 	if result.RowsAffected == 1 {
-		return "", errors.New("product already exists")
+		return "", ErrConflict
 	}
 
 	existingStore := Stores{}
 	result = db.Where("id = ?", product.StoreID).First(&existingStore)
 	if result.RowsAffected == 0 {
-		return "", errors.New("store not found")
+		return "", ErrNotFound
 	}
 
 	if existingStore.OwnerID != userId {
-		return "", errors.New("unauthorized")
+		return "", ErrUnauthorized
 	}
 
 	result = db.Create(&product)
@@ -257,9 +274,14 @@ func (p *productsService) update(userId uuid.UUID, id string, product *Products)
 	db := p.db.DB()
 
 	existingProduct := Products{}
-	db.Preload("Store").Where("id = ?", id).First(&existingProduct)
+	if err := db.Preload("Store").Where("id = ?", id).First(&existingProduct).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	if existingProduct.Store.OwnerID != userId {
-		return errors.New("unauthorized")
+		return ErrUnauthorized
 	}
 
 	result := db.Model(&product).Omit("store_id").Where("id = ?", id).Updates(product)
@@ -274,9 +296,14 @@ func (p *productsService) delete(userId uuid.UUID, id string) error {
 	db := p.db.DB()
 
 	product := Products{}
-	db.Preload("Store").Where("id = ?", id).First(&product)
+	if err := db.Preload("Store").Where("id = ?", id).First(&product).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	if product.Store.OwnerID != userId {
-		return errors.New("unauthorized")
+		return ErrUnauthorized
 	}
 
 	result := db.Delete(&product)

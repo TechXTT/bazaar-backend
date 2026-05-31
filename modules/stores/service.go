@@ -2,11 +2,21 @@ package stores
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
+	"gorm.io/gorm"
+)
+
+// Sentinel errors so handlers can map service failures to HTTP statuses.
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrConflict     = errors.New("already exists")
+	ErrInvalidInput = errors.New("invalid input")
 )
 
 // NewStoresService creates a new users service
@@ -19,33 +29,32 @@ func NewStoresService(i *do.Injector) (Service, error) {
 }
 
 func (s *storesService) GetStores() ([]Stores, error) {
-	stores := s.loads()
-
-	return stores, nil
+	return s.loads()
 }
 
 func (s *storesService) GetStore(id string) (*Stores, error) {
-	store := s.load(uuid.FromStringOrNil(id))
-
-	if store.ID != uuid.Nil {
-		return &store, nil
+	store, err := s.load(uuid.FromStringOrNil(id))
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, errors.New("store not found")
+	return &store, nil
 }
 
 func (s *storesService) GetStoreReputation(id string) (*db.SellerReputation, error) {
-	store := s.load(uuid.FromStringOrNil(id))
-	if store.ID == uuid.Nil {
-		return nil, errors.New("store not found")
+	store, err := s.load(uuid.FromStringOrNil(id))
+	if err != nil {
+		return nil, err
 	}
 	if store.Owner.WalletAddress == "" {
-		return nil, errors.New("store owner not found")
+		return nil, ErrNotFound
 	}
 
 	var rep db.SellerReputation
 	if err := s.db.DB().Where("seller_wallet = ?", strings.ToLower(store.Owner.WalletAddress)).First(&rep).Error; err != nil {
-		return nil, errors.New("no reputation data")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
 	}
 	return &rep, nil
 }
@@ -79,13 +88,17 @@ func (s *storesService) DeleteStore(userId string, id string) error {
 
 func (s *storesService) GetUserStores(userId string) ([]Stores, error) {
 	var stores []Stores
-	s.db.DB().Where("owner_id = ?", userId).Find(&stores)
+	if err := s.db.DB().Where("owner_id = ?", userId).Find(&stores).Error; err != nil {
+		return nil, err
+	}
 	return stores, nil
 }
 
-func (s *storesService) loads() []Stores {
+func (s *storesService) loads() ([]Stores, error) {
 	var stores []Stores
-	s.db.DB().Preload("Owner").Find(&stores)
+	if err := s.db.DB().Preload("Owner").Find(&stores).Error; err != nil {
+		return nil, err
+	}
 
 	var wallets []string
 	for _, st := range stores {
@@ -106,20 +119,25 @@ func (s *storesService) loads() []Stores {
 			}
 		}
 	}
-	return stores
+	return stores, nil
 }
 
-func (s *storesService) load(storeId uuid.UUID) Stores {
+func (s *storesService) load(storeId uuid.UUID) (Stores, error) {
 	var store Stores
-	s.db.DB().Preload("Owner").Where("id = ?", storeId).First(&store)
+	if err := s.db.DB().Preload("Owner").Where("id = ?", storeId).First(&store).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return store, ErrNotFound
+		}
+		return store, err
+	}
 
-	if store.ID != uuid.Nil && store.Owner.WalletAddress != "" {
+	if store.Owner.WalletAddress != "" {
 		var rep db.SellerReputation
 		if s.db.DB().Where("seller_wallet = ?", strings.ToLower(store.Owner.WalletAddress)).First(&rep).Error == nil {
 			store.Reputation = &rep
 		}
 	}
-	return store
+	return store, nil
 }
 
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
@@ -128,13 +146,13 @@ func (s *storesService) save(userId uuid.UUID, store *Stores) error {
 	user := Users{}
 	db.Where("id = ?", userId).First(&user)
 	if user.WalletAddress == "" {
-		return errors.New("user has not set wallet address")
+		return fmt.Errorf("%w: user has not set wallet address", ErrInvalidInput)
 	}
 
 	existingStore := Stores{}
 	result := db.Where("name = ?", store.Name).First(&existingStore)
 	if result.RowsAffected == 1 {
-		return errors.New("store already exists")
+		return ErrConflict
 	}
 
 	store.OwnerID = userId
@@ -151,9 +169,14 @@ func (s *storesService) update(userId uuid.UUID, id string, store *Stores) error
 	db := s.db.DB()
 
 	existingStore := Stores{}
-	db.Where("id = ?", id).First(&existingStore)
+	if err := db.Where("id = ?", id).First(&existingStore).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	if existingStore.OwnerID != userId {
-		return errors.New("unauthorized")
+		return ErrUnauthorized
 	}
 
 	result := db.Model(&store).Omit("owner_id").Where("id = ?", id).Updates(store)
@@ -168,9 +191,14 @@ func (s *storesService) delete(userId uuid.UUID, id string) error {
 	db := s.db.DB()
 
 	store := Stores{}
-	db.Where("id = ?", id).First(&store)
+	if err := db.Where("id = ?", id).First(&store).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
 	if store.OwnerID != userId {
-		return errors.New("unauthorized")
+		return ErrUnauthorized
 	}
 
 	result := db.Delete(&store)
