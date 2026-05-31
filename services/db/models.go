@@ -78,7 +78,7 @@ type Orders struct {
 type Disputes struct {
 	gorm.Model
 	ID                   uuid.UUID     `gorm:"primaryKey"`
-	OrderID              uuid.UUID     `gorm:"not null;index"`
+	OrderID              uuid.UUID     `gorm:"not null;uniqueIndex"`
 	Order                Orders        `gorm:"foreignKey:OrderID"`
 	RaisedBy             string        `gorm:"not null"`
 	ArbitratorDisputeID  *int64
@@ -97,8 +97,8 @@ type DisputeEvidence struct {
 	OrderID     uuid.UUID `gorm:"not null;index"`
 	Party       string    `gorm:"not null"`
 	URI         string    `gorm:"not null"`
-	TxHash      string
-	LogIndex    uint
+	TxHash      string    `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
+	LogIndex    uint      `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
 }
 
 type SellerReputation struct {

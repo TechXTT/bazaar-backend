@@ -150,6 +150,15 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 			return nil, err
 		}
 
+		// The on-chain escrow keys orders by this backend UUID, and the observer
+		// matches incoming events on contract_order_id. Seed it with the order's
+		// UUID so the two stay linked (the local Orders struct has no such field,
+		// so update the column directly).
+		if err := db.Model(&Orders{}).Where("id = ?", order.ID).
+			Update("contract_order_id", order.ID.String()).Error; err != nil {
+			return nil, err
+		}
+
 		orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
 	}
 
