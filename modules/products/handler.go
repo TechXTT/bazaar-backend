@@ -67,6 +67,10 @@ func (s *productsHandler) Gets(w http.ResponseWriter, r *http.Request) {
 func (s *productsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	productId := vars["id"]
+	if _, err := uuid.FromString(productId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
 
 	product, err := s.svc.GetProduct(productId)
 	if err != nil {
@@ -101,13 +105,22 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// read from form data
 	product.Name = r.FormValue("name")
 	product.Description = r.FormValue("description")
+	if product.Name == "" || product.Description == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "name and description are required")
+		return
+	}
 	product.Price, err = strconv.ParseFloat(r.FormValue("price"), 64)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid price")
 		return
 	}
 	product.Unit = "ETH" // TODO: future implementation to allow other coins
-	product.StoreID = uuid.FromStringOrNil(r.FormValue("storeId"))
+	storeID, err := uuid.FromString(r.FormValue("storeId"))
+	if err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
+	product.StoreID = storeID
 
 	id, err := s.svc.CreateProduct(userId, product)
 	if err != nil {
@@ -139,6 +152,10 @@ func (s *productsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	productId := vars["id"]
+	if _, err := uuid.FromString(productId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
 
 	product := &Products{}
 	if err := json.NewDecoder(r.Body).Decode(product); err != nil {
@@ -160,6 +177,10 @@ func (s *productsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	productId := vars["id"]
+	if _, err := uuid.FromString(productId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid product id")
+		return
+	}
 
 	if err := s.svc.DeleteProduct(userId, productId); err != nil {
 		httpjson.WriteError(w, statusForError(err), err.Error())
@@ -173,6 +194,10 @@ func (s *productsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	storeId := vars["id"]
+	if _, err := uuid.FromString(storeId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
 	cursor := r.URL.Query().Get("cursor")
 	limitStr := r.URL.Query().Get("limit")
 
@@ -181,8 +206,8 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	limit, err := strconv.Atoi(limitStr)
-	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+	if err != nil || limit <= 0 {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid limit")
 		return
 	}
 
@@ -242,6 +267,10 @@ func (s *productsHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	userId := r.Header.Get("user_id")
 	vars := mux.Vars(r)
 	orderId := vars["id"]
+	if _, err := uuid.FromString(orderId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid order id")
+		return
+	}
 
 	order, err := s.svc.GetOrder(userId, orderId)
 	if err != nil {

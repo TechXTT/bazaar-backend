@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
 )
@@ -51,6 +52,10 @@ func (s *storesHandler) Gets(w http.ResponseWriter, r *http.Request) {
 func (s *storesHandler) Get(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	storeId := vars["id"]
+	if _, err := uuid.FromString(storeId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
 
 	store, err := s.svc.GetStore(storeId)
 	if err != nil {
@@ -66,6 +71,10 @@ func (s *storesHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (s *storesHandler) GetReputation(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	storeId := vars["id"]
+	if _, err := uuid.FromString(storeId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
 
 	rep, err := s.svc.GetStoreReputation(storeId)
 	if err != nil {
@@ -86,6 +95,10 @@ func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
 		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if store.Name == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "name is required")
+		return
+	}
 
 	if err := s.svc.CreateStore(userId, store); err != nil {
 		httpjson.WriteError(w, statusForError(err), err.Error())
@@ -102,6 +115,10 @@ func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
+	if _, err := uuid.FromString(storeId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
 
 	store := &Stores{}
 	if err := json.NewDecoder(r.Body).Decode(store); err != nil {
@@ -123,6 +140,10 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
+	if _, err := uuid.FromString(storeId); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid store id")
+		return
+	}
 
 	if err := s.svc.DeleteStore(userId, storeId); err != nil {
 		httpjson.WriteError(w, statusForError(err), err.Error())
