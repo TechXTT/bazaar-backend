@@ -4,9 +4,16 @@ import (
 	"errors"
 
 	"github.com/TechXTT/bazaar-backend/services/db"
+	"github.com/gofrs/uuid/v5"
 	"github.com/samber/do"
 	"gorm.io/gorm"
 )
+
+// ErrNotFound is returned when the requested dispute/order does not exist.
+var ErrNotFound = errors.New("not found")
+
+// ErrUnauthorized is returned when the caller may not access the resource.
+var ErrUnauthorized = errors.New("unauthorized")
 
 func NewDisputesService(i *do.Injector) (Service, error) {
 	dbSvc := do.MustInvoke[db.DB](i)
@@ -33,29 +40,45 @@ func (s *disputesService) ListDisputes(userID string) ([]Disputes, error) {
 	return disputes, nil
 }
 
-func (s *disputesService) GetDispute(walletAddress string, orderId string) (*Disputes, error) {
+func (s *disputesService) GetDispute(userID string, orderId string) (*Disputes, error) {
 	gormDB := s.db.DB()
 
+	authorized, err := s.canAccessOrder(userID, orderId)
+	if err != nil {
+		return nil, err
+	}
+	if !authorized {
+		return nil, ErrUnauthorized
+	}
+
 	var dispute Disputes
-	err := gormDB.
+	err = gormDB.
 		Preload("Evidence").
 		Joins("JOIN orders ON disputes.order_id = orders.id").
 		Where("orders.contract_order_id = ?", orderId).
 		First(&dispute).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("dispute not found")
+			return nil, ErrNotFound
 		}
 		return nil, err
 	}
 	return &dispute, nil
 }
 
-func (s *disputesService) GetEvidence(orderId string) ([]DisputeEvidence, error) {
+func (s *disputesService) GetEvidence(userID string, orderId string) ([]DisputeEvidence, error) {
 	gormDB := s.db.DB()
 
+	authorized, err := s.canAccessOrder(userID, orderId)
+	if err != nil {
+		return nil, err
+	}
+	if !authorized {
+		return nil, ErrUnauthorized
+	}
+
 	var evidence []DisputeEvidence
-	err := gormDB.
+	err = gormDB.
 		Joins("JOIN disputes ON dispute_evidences.dispute_id = disputes.id").
 		Joins("JOIN orders ON disputes.order_id = orders.id").
 		Where("orders.contract_order_id = ?", orderId).
@@ -65,4 +88,24 @@ func (s *disputesService) GetEvidence(orderId string) ([]DisputeEvidence, error)
 		return nil, err
 	}
 	return evidence, nil
+}
+
+// canAccessOrder reports whether the user (by UUID) is the buyer of the order
+// identified by its on-chain contract order id, or owns the store the ordered
+// product belongs to. Returns ErrNotFound if no such order exists.
+func (s *disputesService) canAccessOrder(userID string, orderId string) (bool, error) {
+	var order Orders
+	err := s.db.DB().
+		Preload("Product.Store").
+		Where("contract_order_id = ?", orderId).
+		First(&order).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, ErrNotFound
+		}
+		return false, err
+	}
+
+	requesterID := uuid.FromStringOrNil(userID)
+	return order.BuyerID == requesterID || order.Product.Store.OwnerID == requesterID, nil
 }

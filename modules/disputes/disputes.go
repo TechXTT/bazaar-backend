@@ -19,11 +19,13 @@ type (
 		// is the order's buyer or owns the store the ordered product belongs to.
 		ListDisputes(userID string) ([]Disputes, error)
 
-		// GetDispute returns a single dispute with evidence for the given orderId.
-		GetDispute(walletAddress string, orderId string) (*Disputes, error)
+		// GetDispute returns a single dispute with evidence for the given orderId,
+		// provided the caller (user UUID) is the order's buyer or the store owner.
+		GetDispute(userID string, orderId string) (*Disputes, error)
 
-		// GetEvidence returns evidence items for the given orderId.
-		GetEvidence(orderId string) ([]DisputeEvidence, error)
+		// GetEvidence returns evidence items for the given orderId, provided the
+		// caller (user UUID) is the order's buyer or the store owner.
+		GetEvidence(userID string, orderId string) ([]DisputeEvidence, error)
 	}
 
 	// Handler provides HTTP handlers for dispute read endpoints.
