@@ -314,6 +314,37 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": true,
+				"internalType": "bytes32",
+				"name": "orderId",
+				"type": "bytes32"
+			},
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "receiver",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "bytes32",
+				"name": "trackingHash",
+				"type": "bytes32"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "deliveryDeadline",
+				"type": "uint256"
+			}
+		],
+		"name": "OrderShipped",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
 				"indexed": false,
 				"internalType": "address",
 				"name": "account",
@@ -352,6 +383,19 @@
 		"anonymous": false,
 		"inputs": [
 			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "shippingWindow",
+				"type": "uint256"
+			}
+		],
+		"name": "ShippingWindowSet",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
 				"indexed": true,
 				"internalType": "address",
 				"name": "treasury",
@@ -377,6 +421,19 @@
 	{
 		"inputs": [],
 		"name": "DEFAULT_RELEASE_TIME",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "DEFAULT_SHIPPING_WINDOW",
 		"outputs": [
 			{
 				"internalType": "uint256",
@@ -489,6 +546,19 @@
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "bytes32",
+				"name": "orderId",
+				"type": "bytes32"
+			}
+		],
+		"name": "buyerReclaim",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
@@ -716,6 +786,24 @@
 		"type": "function"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "bytes32",
+				"name": "orderId",
+				"type": "bytes32"
+			},
+			{
+				"internalType": "bytes32",
+				"name": "trackingHash",
+				"type": "bytes32"
+			}
+		],
+		"name": "markShipped",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"inputs": [],
 		"name": "nextLocalDisputeId",
 		"outputs": [
@@ -801,6 +889,21 @@
 				"internalType": "uint256",
 				"name": "releaseTime",
 				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "shippingDeadline",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "deliveryWindow",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "shipped",
+				"type": "bool"
 			},
 			{
 				"internalType": "bool",
@@ -971,6 +1074,19 @@
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "_shippingWindow",
+				"type": "uint256"
+			}
+		],
+		"name": "setShippingWindow",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "address",
 				"name": "_treasury",
 				"type": "address"
@@ -979,6 +1095,19 @@
 		"name": "setTreasury",
 		"outputs": [],
 		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "shippingWindow",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{

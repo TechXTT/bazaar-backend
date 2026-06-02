@@ -15,6 +15,7 @@ const (
 	OrderStatusCancelled OrderStatus = "cancelled"
 	OrderStatusReleased  OrderStatus = "released"
 	OrderStatusDisputed  OrderStatus = "disputed"
+	OrderStatusShipped   OrderStatus = "shipped"
 )
 
 type DisputeStatus string
@@ -28,11 +29,11 @@ const (
 
 type Users struct {
 	gorm.Model
-	ID            uuid.UUID  `gorm:"primaryKey"`
-	FirstName     string     `gorm:"not null"`
-	LastName      string     `gorm:"not null"`
+	ID            uuid.UUID `gorm:"primaryKey"`
+	FirstName     string    `gorm:"not null"`
+	LastName      string    `gorm:"not null"`
 	Address       string
-	WalletAddress string     `gorm:"uniqueIndex;not null"`
+	WalletAddress string `gorm:"uniqueIndex;not null"`
 	LastLoginAt   *time.Time
 }
 
@@ -58,47 +59,47 @@ type Products struct {
 
 type Orders struct {
 	gorm.Model
-	ID               uuid.UUID   `gorm:"primaryKey"`
-	ContractOrderID  string      `gorm:"index"`
-	ProductID        uuid.UUID   `gorm:"not null;index"`
-	Product          Products    `gorm:"foreignKey:ProductID"`
-	BuyerID          uuid.UUID   `gorm:"not null;index"`
-	Buyer            Users       `gorm:"foreignKey:BuyerID"`
-	Quantity         int         `gorm:"not null"`
-	Total            float64     `gorm:"not null"`
-	Status           OrderStatus `gorm:"not null;type:varchar(20);default:'pending'"`
-	TxHash           string
+	ID              uuid.UUID   `gorm:"primaryKey"`
+	ContractOrderID string      `gorm:"index"`
+	ProductID       uuid.UUID   `gorm:"not null;index"`
+	Product         Products    `gorm:"foreignKey:ProductID"`
+	BuyerID         uuid.UUID   `gorm:"not null;index"`
+	Buyer           Users       `gorm:"foreignKey:BuyerID"`
+	Quantity        int         `gorm:"not null"`
+	Total           float64     `gorm:"not null"`
+	Status          OrderStatus `gorm:"not null;type:varchar(20);default:'pending'"`
+	TxHash          string
 	// On-chain fields populated by observer
-	Token            string      `gorm:"type:varchar(10)"`    // "eth" or "usdc"
-	OnChainProductID string      `gorm:"index"`               // hex of bytes32 product id
-	Fee              string      `gorm:"type:numeric"`        // platform fee amount as string
+	Token            string `gorm:"type:varchar(10)"` // "eth" or "usdc"
+	OnChainProductID string `gorm:"index"`            // hex of bytes32 product id
+	Fee              string `gorm:"type:numeric"`     // platform fee amount as string
 	MetaEvidenceURI  string
 }
 
 type Disputes struct {
 	gorm.Model
-	ID                   uuid.UUID     `gorm:"primaryKey"`
-	OrderID              uuid.UUID     `gorm:"not null;uniqueIndex"`
-	Order                Orders        `gorm:"foreignKey:OrderID"`
-	RaisedBy             string        `gorm:"not null"`
-	ArbitratorDisputeID  *int64
-	Ruling               *uint8
-	Status               DisputeStatus `gorm:"not null;type:varchar(20);default:'fee_pending'"`
-	TxHash               string
-	LogIndex             uint
-	Evidence             []DisputeEvidence `gorm:"foreignKey:DisputeID"`
+	ID                  uuid.UUID `gorm:"primaryKey"`
+	OrderID             uuid.UUID `gorm:"not null;uniqueIndex"`
+	Order               Orders    `gorm:"foreignKey:OrderID"`
+	RaisedBy            string    `gorm:"not null"`
+	ArbitratorDisputeID *int64
+	Ruling              *uint8
+	Status              DisputeStatus `gorm:"not null;type:varchar(20);default:'fee_pending'"`
+	TxHash              string
+	LogIndex            uint
+	Evidence            []DisputeEvidence `gorm:"foreignKey:DisputeID"`
 }
 
 type DisputeEvidence struct {
 	gorm.Model
-	ID          uuid.UUID `gorm:"primaryKey"`
-	DisputeID   uuid.UUID `gorm:"not null;index"`
-	Dispute     Disputes  `gorm:"foreignKey:DisputeID"`
-	OrderID     uuid.UUID `gorm:"not null;index"`
-	Party       string    `gorm:"not null"`
-	URI         string    `gorm:"not null"`
-	TxHash      string    `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
-	LogIndex    uint      `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
+	ID        uuid.UUID `gorm:"primaryKey"`
+	DisputeID uuid.UUID `gorm:"not null;index"`
+	Dispute   Disputes  `gorm:"foreignKey:DisputeID"`
+	OrderID   uuid.UUID `gorm:"not null;index"`
+	Party     string    `gorm:"not null"`
+	URI       string    `gorm:"not null"`
+	TxHash    string    `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
+	LogIndex  uint      `gorm:"uniqueIndex:idx_dispute_evidence_tx_log"`
 }
 
 type SellerReputation struct {

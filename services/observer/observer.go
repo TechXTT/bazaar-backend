@@ -64,6 +64,7 @@ func NewObserver(i *do.Injector) (Observer, error) {
 func (o *observer) SubscribeToEvents(contractAddress common.Address, logs chan<- types.Log, contractABI abi.ABI) (ethereum.Subscription, error) {
 	eventNames := []string{
 		"OrderCreated", "OrderCompleted", "OrderReleased", "OrderRefunded",
+		"OrderShipped",
 		"DisputeRaised", "DisputeResolved", "Ruling", "Evidence", "MetaEvidence",
 	}
 
@@ -136,6 +137,8 @@ func (o *observer) handleLog(vLog types.Log, contractABI abi.ABI) {
 		o.handleOrderReleased(vLog, contractABI)
 	case topic == contractABI.Events["OrderRefunded"].ID.Hex():
 		o.handleOrderRefunded(vLog, contractABI)
+	case topic == contractABI.Events["OrderShipped"].ID.Hex():
+		o.handleOrderShipped(vLog, contractABI)
 	case topic == contractABI.Events["DisputeRaised"].ID.Hex():
 		o.handleDisputeRaised(vLog, contractABI)
 	case topic == contractABI.Events["DisputeResolved"].ID.Hex():
@@ -315,6 +318,39 @@ func (o *observer) handleOrderRefunded(vLog types.Log, contractABI abi.ABI) {
 		})
 
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
+}
+
+func (o *observer) handleOrderShipped(vLog types.Log, contractABI abi.ABI) {
+	type OrderShipped struct {
+		TrackingHash     [32]uint8
+		DeliveryDeadline *big.Int
+	}
+
+	// indexed: orderId (topic[1]), receiver (topic[2])
+	// non-indexed fields in Data: trackingHash, deliveryDeadline
+	var ev OrderShipped
+	if err := contractABI.UnpackIntoInterface(&ev, "OrderShipped", vLog.Data); err != nil {
+		log.Println("observer: unpack OrderShipped:", err)
+		return
+	}
+
+	var orderIdBytes [32]uint8
+	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
+	orderId, err := bytes32ToUUID(orderIdBytes)
+	if err != nil {
+		log.Println("observer: invalid orderId in OrderShipped:", err)
+		return
+	}
+
+	gormDB := o.db.DB()
+	if err := gormDB.Model(&db.Orders{}).
+		Where("contract_order_id = ?", orderId).
+		Updates(map[string]interface{}{
+			"status":  db.OrderStatusShipped,
+			"tx_hash": vLog.TxHash.Hex(),
+		}).Error; err != nil {
+		log.Println("observer: failed to update order for OrderShipped", orderId, ":", err)
+	}
 }
 
 func (o *observer) handleDisputeRaised(vLog types.Log, contractABI abi.ABI) {
