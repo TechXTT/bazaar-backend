@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -121,17 +121,24 @@ func NewConfig(i *do.Injector) (Config, error) {
 	writeTimeout, _ := time.ParseDuration(os.Getenv("HTTP_WRITE_TIMEOUT"))
 	idleTimeout, _ := time.ParseDuration(os.Getenv("HTTP_IDLE_TIMEOUT"))
 
-	allowedOrigins := os.Getenv("HTTP_ALLOWED_ORIGINS")
-	allowedOriginsList := strings.Split(allowedOrigins, ",")
-	log.Print(allowedOriginsList)
-	allowedMethods := os.Getenv("HTTP_ALLOWED_METHODS")
-	allowedMethodsList := strings.Split(allowedMethods, ",")
-	allowedHeaders := os.Getenv("HTTP_ALLOWED_HEADERS")
-	allowedHeadersList := strings.Split(allowedHeaders, ",")
-	exposedHeaders := os.Getenv("HTTP_EXPOSED_HEADERS")
-	exposedHeadersList := strings.Split(exposedHeaders, ",")
+	allowedOriginsList := splitAndTrim(os.Getenv("HTTP_ALLOWED_ORIGINS"))
+	allowedMethodsList := splitAndTrim(os.Getenv("HTTP_ALLOWED_METHODS"))
+	allowedHeadersList := splitAndTrim(os.Getenv("HTTP_ALLOWED_HEADERS"))
+	exposedHeadersList := splitAndTrim(os.Getenv("HTTP_EXPOSED_HEADERS"))
 	allowCredentialsRaw := getEnv("HTTP_ALLOW_CREDENTIALS", os.Getenv("HTTP_ALLOWED_CREDENTIALS"))
 	allowCredentials, _ := strconv.ParseBool(allowCredentialsRaw)
+
+	// BE-1: allowing "*" origins (or reflecting any origin) together with
+	// credentials is the canonical dangerous CORS misconfiguration. Fail fast
+	// rather than ship a backend any website can drive authenticated requests against.
+	if allowCredentials {
+		if containsWildcard(allowedOriginsList) {
+			return nil, fmt.Errorf(`invalid CORS config: HTTP_ALLOWED_CREDENTIALS=true cannot be combined with a "*" entry in HTTP_ALLOWED_ORIGINS; pin explicit origins`)
+		}
+		if containsWildcard(allowedHeadersList) {
+			return nil, fmt.Errorf(`invalid CORS config: HTTP_ALLOWED_CREDENTIALS=true cannot be combined with "*" in HTTP_ALLOWED_HEADERS; pin an explicit allowlist (e.g. Content-Type, Authorization)`)
+		}
+	}
 
 	cfg.HTTP = HTTPConfig{
 		Hostname:         os.Getenv("HTTP_HOSTNAME"),
@@ -218,6 +225,30 @@ func getEnv(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// splitAndTrim splits a comma-separated env value and trims whitespace from
+// each entry, dropping empties. Centralising the trimming keeps the CORS
+// wildcard check (BE-1) from being fooled by " *" with stray spaces.
+func splitAndTrim(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// containsWildcard reports whether the list contains a "*" entry.
+func containsWildcard(values []string) bool {
+	for _, v := range values {
+		if v == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Base) GetHTTP() HTTPConfig {
