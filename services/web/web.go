@@ -19,12 +19,30 @@ type (
 	}
 
 	web struct {
-		handler *mux.Router
-		cfg     config.Config
+		handler   *mux.Router
+		cfg       config.Config
+		defaultRL *rateLimiter
+		authRL    *rateLimiter
 	}
 )
 
 var HookBuildRouter = hooks.NewHook[*mux.Router]("router.build")
+
+// authRateLimiter holds the strict per-IP limiter used for auth endpoints. It is
+// initialised in NewWeb and exposed via AuthRateLimit so modules registering
+// auth routes (e.g. users) can opt into tighter throttling than the global
+// default.
+var authRateLimiter *rateLimiter
+
+// AuthRateLimit returns a middleware that applies the strict auth rate limit.
+// Safe to call from router-build hooks; if the limiter is not yet initialised it
+// returns a pass-through so route registration never panics.
+func AuthRateLimit() func(http.Handler) http.Handler {
+	if authRateLimiter == nil {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	return authRateLimiter.middleware("auth")
+}
 
 func init() {
 	app.HookBoot.Listen(func(e hooks.Event[*do.Injector]) {
@@ -36,13 +54,22 @@ func NewWeb(i *do.Injector) (Web, error) {
 	w := &web{
 		handler: mux.NewRouter().PathPrefix("/api").Subrouter(),
 		cfg:     do.MustInvoke[config.Config](i),
+		// BE-6: default limiter applied to every /api route (generous), plus a
+		// strict limiter for auth endpoints to blunt nonce/verify floods.
+		defaultRL: newRateLimiter(20, 40),
+		authRL:    newRateLimiter(1, 5),
 	}
+	authRateLimiter = w.authRL
 	w.buildRouter()
 
 	return w, nil
 }
 
 func (w *web) buildRouter() {
+	// BE-6: apply the default per-IP rate limiter to every /api route. Modules
+	// that register auth routes additionally opt into AuthRateLimit().
+	w.handler.Use(w.defaultRL.middleware("default"))
+
 	uploadDir := w.cfg.GetS3Spaces().LocalUploadDir
 	if uploadDir != "" {
 		w.handler.PathPrefix("/uploads/").Handler(

@@ -3,6 +3,7 @@ package users
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
@@ -65,10 +66,11 @@ type (
 	}
 
 	usersService struct {
-		db     db.DB
-		jwks   jwt.Jwks
-		cfg    config.Config
-		nonces sync.Map // walletAddress -> nonceEntry
+		db         db.DB
+		jwks       jwt.Jwks
+		cfg        config.Config
+		nonces     sync.Map     // walletAddress -> nonceEntry
+		nonceCount atomic.Int64 // BE-6: bounds the nonce store
 	}
 
 	usersHandler struct {
@@ -94,8 +96,12 @@ func init() {
 		authenticatedHandler.HandleFunc("/users/me", h.Me).Methods(http.MethodGet)
 		authenticatedHandler.HandleFunc("/users/refresh", h.Refresh).Methods(http.MethodPost)
 
-		// Public SIWE endpoints
-		e.Msg.HandleFunc("/auth/nonce", h.Nonce).Methods(http.MethodPost)
-		e.Msg.HandleFunc("/auth/verify", h.Verify).Methods(http.MethodPost)
+		// Public SIWE endpoints. BE-6: subject them to the strict auth rate
+		// limiter so the unbounded nonce store and signature verification cannot
+		// be flooded from a single source.
+		authHandler := e.Msg.NewRoute().Subrouter()
+		authHandler.Use(web.AuthRateLimit())
+		authHandler.HandleFunc("/auth/nonce", h.Nonce).Methods(http.MethodPost)
+		authHandler.HandleFunc("/auth/verify", h.Verify).Methods(http.MethodPost)
 	})
 }

@@ -13,6 +13,7 @@ require (
 	github.com/rs/cors v1.10.1
 	github.com/samber/do v1.6.0
 	github.com/spruceid/siwe-go v0.2.1
+	golang.org/x/time v0.3.0
 	gorm.io/driver/postgres v1.5.4
 	gorm.io/gorm v1.25.5
 )

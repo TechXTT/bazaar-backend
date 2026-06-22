@@ -18,6 +18,11 @@ import (
 
 const nonceTTL = 5 * time.Minute
 
+// BE-6: cap the in-memory nonce store so a flood of distinct wallet addresses
+// cannot exhaust process memory. When the store reaches maxNonces we sweep
+// expired entries first; if it is still at capacity we reject new nonces.
+const maxNonces = 50000
+
 // NewUsersService creates a new users service
 func NewUsersService(i *do.Injector) (Service, error) {
 	dbSvc := do.MustInvoke[db.DB](i)
@@ -38,12 +43,48 @@ func (u *usersService) GetNonce(walletAddress string) (string, error) {
 	}
 	nonce := hex.EncodeToString(b)
 
-	u.nonces.Store(strings.ToLower(walletAddress), nonceEntry{
+	addr := strings.ToLower(walletAddress)
+
+	// BE-6: bound the store. Overwriting an existing wallet's nonce does not grow
+	// the map, so only guard when inserting a brand-new key.
+	if _, exists := u.nonces.Load(addr); !exists {
+		if u.nonceCount.Load() >= maxNonces {
+			u.sweepNonces()
+		}
+		if u.nonceCount.Load() >= maxNonces {
+			return "", errors.New("nonce store is full; try again shortly")
+		}
+		u.nonceCount.Add(1)
+	}
+
+	u.nonces.Store(addr, nonceEntry{
 		nonce:     nonce,
 		expiresAt: time.Now().Add(nonceTTL),
 	})
 
 	return nonce, nil
+}
+
+// deleteNonce removes a nonce entry and keeps the counter in sync (BE-6).
+func (u *usersService) deleteNonce(addr string) {
+	if _, loaded := u.nonces.LoadAndDelete(addr); loaded {
+		u.nonceCount.Add(-1)
+	}
+}
+
+// sweepNonces evicts all expired nonce entries, keeping the in-memory store
+// bounded (BE-6).
+func (u *usersService) sweepNonces() {
+	now := time.Now()
+	u.nonces.Range(func(key, value any) bool {
+		entry, ok := value.(nonceEntry)
+		if !ok || now.After(entry.expiresAt) {
+			if _, loaded := u.nonces.LoadAndDelete(key); loaded {
+				u.nonceCount.Add(-1)
+			}
+		}
+		return true
+	})
 }
 
 func (u *usersService) VerifySIWE(message string, signature string) (string, *Users, error) {
@@ -60,7 +101,7 @@ func (u *usersService) VerifySIWE(message string, signature string) (string, *Us
 	}
 	entry := raw.(nonceEntry)
 	if time.Now().After(entry.expiresAt) {
-		u.nonces.Delete(addr)
+		u.deleteNonce(addr)
 		return "", nil, errors.New("nonce expired")
 	}
 	if parsed.GetNonce() != entry.nonce {
@@ -73,7 +114,7 @@ func (u *usersService) VerifySIWE(message string, signature string) (string, *Us
 	}
 
 	// Nonce is single-use
-	u.nonces.Delete(addr)
+	u.deleteNonce(addr)
 
 	user, err := u.upsertWallet(addr)
 	if err != nil {
