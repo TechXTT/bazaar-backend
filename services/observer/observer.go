@@ -126,6 +126,24 @@ func (o *observer) RunSubscription(contractABIPath string) error {
 }
 
 func (o *observer) handleLog(vLog types.Log, contractABI abi.ABI) {
+	// BE-2: a panic in any handler (e.g. an out-of-range Topics index from a
+	// malformed/anonymous log) must not take down the observer goroutine and,
+	// with it, the whole backend. Recover, log, and keep consuming events.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("observer: recovered from panic handling log (tx=%s logIndex=%d): %v",
+				vLog.TxHash.Hex(), vLog.Index, r)
+		}
+	}()
+
+	// An anonymous or malformed log can have no topics; Topics[0] is the event
+	// signature, so without it we cannot dispatch.
+	if len(vLog.Topics) == 0 {
+		log.Printf("observer: skipping log with no topics (tx=%s logIndex=%d)",
+			vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
+
 	topic := vLog.Topics[0].Hex()
 
 	switch {
@@ -198,6 +216,10 @@ func (o *observer) handleOrderCreated(vLog types.Log, contractABI abi.ABI) {
 
 	// orderId is indexed — recover from topic[1]
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -251,6 +273,10 @@ func (o *observer) handleOrderCompleted(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -272,6 +298,10 @@ func (o *observer) handleOrderCompleted(vLog types.Log, contractABI abi.ABI) {
 
 func (o *observer) handleOrderReleased(vLog types.Log, contractABI abi.ABI) {
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -302,6 +332,10 @@ func (o *observer) handleOrderRefunded(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -335,6 +369,10 @@ func (o *observer) handleOrderShipped(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -365,6 +403,10 @@ func (o *observer) handleDisputeRaised(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
@@ -416,6 +458,10 @@ func (o *observer) handleDisputeResolved(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	var orderIdBytes [32]uint8
+	if len(vLog.Topics) < 2 {
+		log.Printf("observer: log missing indexed orderId topic (tx=%s logIndex=%d)", vLog.TxHash.Hex(), vLog.Index)
+		return
+	}
 	copy(orderIdBytes[:], vLog.Topics[1].Bytes())
 	orderId, err := bytes32ToUUID(orderIdBytes)
 	if err != nil {
