@@ -134,48 +134,60 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 
 	var orderResponses []OrderResponse
 
-	for _, orderData := range ordersData {
-		product, ok := productByID[orderData.ProductID]
-		if !ok {
-			return nil, ErrNotFound
+	// BE-4: create every order for a (possibly multi-item) cart atomically.
+	// Previously each order was inserted and then a *second*, untransacted write
+	// set contract_order_id — so a failure left an orphaned order with an empty
+	// contract_order_id the observer could never link to chain, and a mid-loop
+	// failure committed earlier items while later ones failed, diverging the DB
+	// from on-chain escrow. Wrapping the batch in a transaction makes both the
+	// per-item insert+update and the whole batch all-or-nothing.
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		for _, orderData := range ordersData {
+			product, ok := productByID[orderData.ProductID]
+			if !ok {
+				return ErrNotFound
+			}
+
+			owner := product.Store.Owner
+
+			if owner.WalletAddress == "" {
+				return fmt.Errorf("%w: owner wallet address not found", ErrInvalidInput)
+			}
+
+			if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
+				return fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
+			}
+
+			order := Orders{
+				ProductID: orderData.ProductID,
+				BuyerID:   uuid.FromStringOrNil(userId),
+				Quantity:  orderData.Quantity,
+			}
+			order.CreatedAt = orderData.CreatedAt
+
+			if owner.ID == order.BuyerID {
+				return fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
+			}
+
+			order.Total = float64(order.Quantity) * product.Price
+			if err := tx.Create(&order).Error; err != nil {
+				return err
+			}
+
+			// The on-chain escrow keys orders by this backend UUID, and the observer
+			// matches incoming events on contract_order_id. Seed it with the order's
+			// UUID so the two stay linked (the local Orders struct has no such field,
+			// so update the column directly).
+			if err := tx.Model(&Orders{}).Where("id = ?", order.ID).
+				Update("contract_order_id", order.ID.String()).Error; err != nil {
+				return err
+			}
+
+			orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
 		}
-
-		owner := product.Store.Owner
-
-		if owner.WalletAddress == "" {
-			return nil, fmt.Errorf("%w: owner wallet address not found", ErrInvalidInput)
-		}
-
-		if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
-			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
-		}
-
-		order := Orders{
-			ProductID: orderData.ProductID,
-			BuyerID:   uuid.FromStringOrNil(userId),
-			Quantity:  orderData.Quantity,
-		}
-		order.CreatedAt = orderData.CreatedAt
-
-		if owner.ID == order.BuyerID {
-			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
-		}
-
-		order.Total = float64(order.Quantity) * product.Price
-		if err := db.Create(&order).Error; err != nil {
-			return nil, err
-		}
-
-		// The on-chain escrow keys orders by this backend UUID, and the observer
-		// matches incoming events on contract_order_id. Seed it with the order's
-		// UUID so the two stay linked (the local Orders struct has no such field,
-		// so update the column directly).
-		if err := db.Model(&Orders{}).Where("id = ?", order.ID).
-			Update("contract_order_id", order.ID.String()).Error; err != nil {
-			return nil, err
-		}
-
-		orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return orderResponses, nil
