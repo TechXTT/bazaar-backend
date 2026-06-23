@@ -162,6 +162,10 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 				ProductID: orderData.ProductID,
 				BuyerID:   uuid.FromStringOrNil(userId),
 				Quantity:  orderData.Quantity,
+				// Fee maps to a numeric column; the zero value "" is invalid numeric
+				// input (SQLSTATE 22P02). Seed a valid placeholder — the observer
+				// records the real platform fee from the on-chain payout event.
+				Fee: "0",
 			}
 			order.CreatedAt = orderData.CreatedAt
 
