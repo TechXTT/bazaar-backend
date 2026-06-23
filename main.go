@@ -38,7 +38,8 @@ func healthcheck() {
 		port = "8000"
 	}
 	client := http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://127.0.0.1:" + port + "/health")
+	// The router is mounted under /api, so the liveness route is /api/health.
+	resp, err := client.Get("http://127.0.0.1:" + port + "/api/health")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "healthcheck:", err)
 		os.Exit(1)
