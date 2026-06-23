@@ -42,8 +42,9 @@ type (
 		// GetOrders returns all orders
 		GetOrders(userId string, filter string) ([]Orders, error)
 
-		// SaveFile saves a file to the object storage
-		SaveFile(file multipart.File, filepath string) (string, error)
+		// SaveImage validates and saves an uploaded image to object storage under
+		// a server-generated key derived from keyPrefix.
+		SaveImage(file multipart.File, keyPrefix string) (string, error)
 
 		// GetOrder returns an order by id
 		GetOrder(userId string, id string) (*Orders, error)

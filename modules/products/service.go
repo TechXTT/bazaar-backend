@@ -212,8 +212,8 @@ func (p *productsService) GetOrders(userId string, filter string) ([]Orders, err
 	return orders, nil
 }
 
-func (p *productsService) SaveFile(file multipart.File, filepath string) (string, error) {
-	return p.s3spaces.SaveFile(file, filepath)
+func (p *productsService) SaveImage(file multipart.File, keyPrefix string) (string, error) {
+	return p.s3spaces.SaveImage(file, keyPrefix)
 }
 
 func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
