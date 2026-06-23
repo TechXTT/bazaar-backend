@@ -14,7 +14,7 @@
 # root .env (env_file) and the mounted /data volume at runtime (see compose).
 
 # ---- build stage ----
-FROM golang:1.25 AS builder
+FROM golang:1.21 AS builder
 
 WORKDIR /src
 
