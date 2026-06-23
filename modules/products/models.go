@@ -1,77 +1,26 @@
 package products
 
 import (
-	"time"
-
-	"github.com/gofrs/uuid/v5"
-	"gorm.io/gorm"
+	"github.com/TechXTT/bazaar-backend/services/db"
 )
 
-type OrderStatus string
+// BE-7: services/db is the single source of truth for GORM models. The products
+// module previously carried a divergent, *older* Orders shape (4 statuses, none
+// of the on-chain fields the observer writes), which silently dropped data.
+// Alias to the shared models so reads and writes go through one definition.
+type (
+	Users    = db.Users
+	Stores   = db.Stores
+	Products = db.Products
+	Orders   = db.Orders
+)
+
+// OrderStatus and its values mirror the shared db definitions.
+type OrderStatus = db.OrderStatus
 
 const (
-	OrderStatusPending   OrderStatus = "pending"
-	OrderStatusCompleted OrderStatus = "completed"
-	OrderStatusCancelled OrderStatus = "cancelled"
-	OrderStatusReleased  OrderStatus = "released"
+	OrderStatusPending   = db.OrderStatusPending
+	OrderStatusCompleted = db.OrderStatusCompleted
+	OrderStatusCancelled = db.OrderStatusCancelled
+	OrderStatusReleased  = db.OrderStatusReleased
 )
-
-// Users mirrors the columns of the live users table (see services/db.Users).
-// The legacy email/password columns were dropped, so they must not appear here
-// or a Preload("Store.Owner") would try to scan non-existent columns.
-type Users struct {
-	gorm.Model
-	ID            uuid.UUID `gorm:"primaryKey"`
-	FirstName     string    `gorm:"not null"`
-	LastName      string    `gorm:"not null"`
-	Address       string
-	WalletAddress string `gorm:"uniqueIndex;not null"`
-	LastLoginAt   *time.Time
-}
-
-type Stores struct {
-	gorm.Model
-	ID       uuid.UUID  `gorm:"primaryKey"`
-	Name     string     `gorm:"unique, not null"`
-	OwnerID  uuid.UUID  `gorm:"not null;index"`
-	Owner    Users      `gorm:"foreignKey:OwnerID"`
-	Products []Products `gorm:"foreignKey:StoreID"`
-}
-
-type Products struct {
-	gorm.Model
-	ID    uuid.UUID `gorm:"primaryKey"`
-	Name  string    `gorm:"not null"`
-	Price float64   `gorm:"not null"`
-	Unit  string    `gorm:"not null"`
-
-	ImageURL string
-	// TODO: Define options for products
-	Description string    `gorm:"not null"`
-	StoreID     uuid.UUID `gorm:"not null;index"`
-	Store       Stores    `gorm:"foreignKey:StoreID"`
-}
-
-type Orders struct {
-	gorm.Model
-	ID        uuid.UUID   `gorm:"primaryKey"`
-	ProductID uuid.UUID   `gorm:"not null;index"`
-	Product   Products    `gorm:"foreignKey:ProductID"`
-	BuyerID   uuid.UUID   `gorm:"not null;index"`
-	Quantity  int         `gorm:"not null"`
-	Total     float64     `gorm:"not null"`
-	Status    OrderStatus `gorm:"not null;type:varchar(20);default:'pending'"`
-	TxHash    string
-	// TODO: add tracking number and shipping address for orders, and txHash for payment
-}
-
-func (o *Orders) BeforeCreate(tx *gorm.DB) (err error) {
-	o.ID, err = uuid.NewV4()
-	o.Status = OrderStatusPending
-	return err
-}
-
-func (s *Products) BeforeCreate(tx *gorm.DB) (err error) {
-	s.ID, err = uuid.NewV4()
-	return err
-}

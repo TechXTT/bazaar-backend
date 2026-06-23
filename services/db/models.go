@@ -27,22 +27,41 @@ const (
 	DisputeStatusTimedOut    DisputeStatus = "timed_out"
 )
 
+// Users is the single source-of-truth model for the users table. The JSON tags
+// preserve the wire contract previously defined by the per-module copy
+// (BE-7).
 type Users struct {
 	gorm.Model
-	ID            uuid.UUID `gorm:"primaryKey"`
-	FirstName     string    `gorm:"not null"`
-	LastName      string    `gorm:"not null"`
-	Address       string
-	WalletAddress string `gorm:"uniqueIndex;not null"`
-	LastLoginAt   *time.Time
+	ID            uuid.UUID  `gorm:"primaryKey" json:"ID"`
+	FirstName     string     `json:"FirstName"`
+	LastName      string     `json:"LastName"`
+	Address       string     `json:"Address,omitempty"`
+	WalletAddress string     `gorm:"uniqueIndex;not null" json:"WalletAddress"`
+	LastLoginAt   *time.Time `json:"LastLoginAt,omitempty"`
+}
+
+func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
+	if u.ID == uuid.Nil {
+		u.ID, err = uuid.NewV4()
+	}
+	return err
 }
 
 type Stores struct {
 	gorm.Model
-	ID      uuid.UUID `gorm:"primaryKey"`
-	Name    string    `gorm:"not null" json:"name"`
-	OwnerID uuid.UUID `gorm:"not null;index" json:"owner_id"`
-	Owner   Users     `gorm:"foreignKey:OwnerID"`
+	ID         uuid.UUID         `gorm:"primaryKey"`
+	Name       string            `gorm:"not null" json:"name"`
+	OwnerID    uuid.UUID         `gorm:"not null;index" json:"owner_id"`
+	Owner      Users             `gorm:"foreignKey:OwnerID"`
+	Products   []Products        `gorm:"foreignKey:StoreID"`
+	Reputation *SellerReputation `gorm:"-"`
+}
+
+func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
+	if s.ID == uuid.Nil {
+		s.ID, err = uuid.NewV4()
+	}
+	return err
 }
 
 type Products struct {
@@ -55,6 +74,13 @@ type Products struct {
 	Description string    `gorm:"not null"`
 	StoreID     uuid.UUID `gorm:"not null;index"`
 	Store       Stores    `gorm:"foreignKey:StoreID"`
+}
+
+func (p *Products) BeforeCreate(tx *gorm.DB) (err error) {
+	if p.ID == uuid.Nil {
+		p.ID, err = uuid.NewV4()
+	}
+	return err
 }
 
 type Orders struct {
@@ -74,6 +100,19 @@ type Orders struct {
 	OnChainProductID string `gorm:"index"`            // hex of bytes32 product id
 	Fee              string `gorm:"type:numeric"`     // platform fee amount as string
 	MetaEvidenceURI  string
+}
+
+func (o *Orders) BeforeCreate(tx *gorm.DB) (err error) {
+	if o.ID == uuid.Nil {
+		o.ID, err = uuid.NewV4()
+		if err != nil {
+			return err
+		}
+	}
+	if o.Status == "" {
+		o.Status = OrderStatusPending
+	}
+	return nil
 }
 
 type Disputes struct {
