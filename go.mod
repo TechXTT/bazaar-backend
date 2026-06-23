@@ -2,6 +2,11 @@ module github.com/TechXTT/bazaar-backend
 
 go 1.21.11
 
+// Build with a patched toolchain so the binary links current stdlib (clears the
+// govulncheck stdlib findings: net/textproto, crypto/x509, et al., fixed in 1.25.11).
+// The language level stays 1.21 for source compatibility.
+toolchain go1.25.11
+
 require (
 	github.com/algolia/algoliasearch-client-go/v4 v4.39.1
 	github.com/aws/aws-sdk-go v1.50.12
