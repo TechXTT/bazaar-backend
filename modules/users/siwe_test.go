@@ -12,7 +12,7 @@ import (
 func TestVerifySIWE_Negatives(t *testing.T) {
 	t.Run("malformed message", func(t *testing.T) {
 		u := &usersService{}
-		if _, _, err := u.VerifySIWE("not a siwe message", "0xsig"); err == nil {
+		if _, _, _, err := u.VerifySIWE("not a siwe message", "0xsig"); err == nil {
 			t.Fatal("expected error for malformed SIWE message")
 		}
 	})
@@ -20,7 +20,7 @@ func TestVerifySIWE_Negatives(t *testing.T) {
 	t.Run("nonce not found", func(t *testing.T) {
 		u := &usersService{}
 		msg := validSIWEMessage(t, "0x0000000000000000000000000000000000000001", "abcdef0123456789")
-		_, _, err := u.VerifySIWE(msg, "0xsig")
+		_, _, _, err := u.VerifySIWE(msg, "0xsig")
 		if err == nil || !strings.Contains(err.Error(), "nonce not found") {
 			t.Fatalf("expected nonce-not-found error, got %v", err)
 		}
@@ -35,7 +35,7 @@ func TestVerifySIWE_Negatives(t *testing.T) {
 		})
 		u.nonceCount.Add(1)
 		msg := validSIWEMessage(t, addr, "abcdef0123456789")
-		_, _, err := u.VerifySIWE(msg, "0xsig")
+		_, _, _, err := u.VerifySIWE(msg, "0xsig")
 		if err == nil || !strings.Contains(err.Error(), "expired") {
 			t.Fatalf("expected nonce-expired error, got %v", err)
 		}
@@ -50,7 +50,7 @@ func TestVerifySIWE_Negatives(t *testing.T) {
 		})
 		u.nonceCount.Add(1)
 		msg := validSIWEMessage(t, addr, "abcdef0123456789")
-		_, _, err := u.VerifySIWE(msg, "0xsig")
+		_, _, _, err := u.VerifySIWE(msg, "0xsig")
 		if err == nil || !strings.Contains(err.Error(), "mismatch") {
 			t.Fatalf("expected nonce-mismatch error, got %v", err)
 		}

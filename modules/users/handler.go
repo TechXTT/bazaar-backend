@@ -52,15 +52,16 @@ func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, user, err := u.svc.VerifySIWE(body.Message, body.Signature)
+	token, refresh, user, err := u.svc.VerifySIWE(body.Message, body.Signature)
 	if err != nil {
 		httpjson.WriteAppError(w, http.StatusUnauthorized, err)
 		return
 	}
 
 	httpjson.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"token": token,
-		"user":  user,
+		"token":        token,
+		"refreshToken": refresh,
+		"user":         user,
 	})
 }
 
@@ -104,14 +105,53 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 	httpjson.WriteJSON(w, http.StatusOK, user)
 }
 
+// Refresh rotates an opaque refresh token (BE-16). The client posts its current
+// refresh token; on success it receives a new access JWT and a new refresh
+// token, and the old refresh token is invalidated.
 func (u *usersHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.UserID(r)
-
-	token, err := u.svc.RefreshToken(userID)
-	if err != nil {
-		httpjson.WriteAppError(w, http.StatusUnauthorized, err)
+	var body struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.RefreshToken == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "refreshToken is required")
 		return
 	}
 
-	httpjson.WriteJSON(w, http.StatusOK, map[string]string{"token": token})
+	token, newRefresh, err := u.svc.RefreshToken(body.RefreshToken)
+	if err != nil {
+		httpjson.WriteError(w, http.StatusUnauthorized, "invalid or expired refresh token")
+		return
+	}
+
+	httpjson.WriteJSON(w, http.StatusOK, map[string]string{
+		"token":        token,
+		"refreshToken": newRefresh,
+	})
+}
+
+// Logout denylists the supplied refresh token (BE-16). Idempotent: a missing or
+// already-invalid token still returns 200 so logout never leaks token validity.
+func (u *usersHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpjson.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if body.RefreshToken == "" {
+		httpjson.WriteError(w, http.StatusBadRequest, "refreshToken is required")
+		return
+	}
+
+	if err := u.svc.Logout(body.RefreshToken); err != nil {
+		httpjson.WriteError(w, http.StatusInternalServerError, "logout failed")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

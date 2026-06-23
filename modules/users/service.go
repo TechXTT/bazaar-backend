@@ -12,6 +12,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
+	"github.com/TechXTT/bazaar-backend/services/refreshtoken"
 	"github.com/samber/do"
 	"gorm.io/gorm"
 )
@@ -28,11 +29,13 @@ func NewUsersService(i *do.Injector) (Service, error) {
 	dbSvc := do.MustInvoke[db.DB](i)
 	jwks := do.MustInvoke[jwt.Jwks](i)
 	cfg := do.MustInvoke[config.Config](i)
+	refresh := do.MustInvoke[refreshtoken.Service](i)
 
 	return &usersService{
-		db:   dbSvc,
-		jwks: jwks,
-		cfg:  cfg,
+		db:      dbSvc,
+		jwks:    jwks,
+		refresh: refresh,
+		cfg:     cfg,
 	}, nil
 }
 
@@ -87,30 +90,30 @@ func (u *usersService) sweepNonces() {
 	})
 }
 
-func (u *usersService) VerifySIWE(message string, signature string) (string, *Users, error) {
+func (u *usersService) VerifySIWE(message string, signature string) (string, string, *Users, error) {
 	parsed, err := siwe.ParseMessage(message)
 	if err != nil {
-		return "", nil, errors.New("invalid SIWE message")
+		return "", "", nil, errors.New("invalid SIWE message")
 	}
 
 	addr := strings.ToLower(parsed.GetAddress().Hex())
 
 	raw, ok := u.nonces.Load(addr)
 	if !ok {
-		return "", nil, errors.New("nonce not found; request a new nonce first")
+		return "", "", nil, errors.New("nonce not found; request a new nonce first")
 	}
 	entry := raw.(nonceEntry)
 	if time.Now().After(entry.expiresAt) {
 		u.deleteNonce(addr)
-		return "", nil, errors.New("nonce expired")
+		return "", "", nil, errors.New("nonce expired")
 	}
 	if parsed.GetNonce() != entry.nonce {
-		return "", nil, errors.New("nonce mismatch")
+		return "", "", nil, errors.New("nonce mismatch")
 	}
 
 	_, err = parsed.Verify(signature, nil, &entry.nonce, nil)
 	if err != nil {
-		return "", nil, errors.New("signature verification failed")
+		return "", "", nil, errors.New("signature verification failed")
 	}
 
 	// Nonce is single-use
@@ -118,16 +121,23 @@ func (u *usersService) VerifySIWE(message string, signature string) (string, *Us
 
 	user, err := u.upsertWallet(addr)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	// Store user UUID (not wallet address) so all service lookups work by UUID.
 	token, err := u.jwks.GenerateToken(user.ID.String())
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
-	return token, user, nil
+	// BE-16: issue an opaque, rotating refresh token alongside the short-lived
+	// access JWT so the client can renew without re-running SIWE.
+	refresh, err := u.refresh.Issue(user.ID.String())
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	return token, refresh, user, nil
 }
 
 func (u *usersService) GetMe(userID string) (*Users, error) {
@@ -157,11 +167,34 @@ func (u *usersService) DeleteUser(userID string) error {
 	return gormDB.Where("id = ?", userID).Delete(&Users{}).Error
 }
 
-func (u *usersService) RefreshToken(userID string) (string, error) {
-	if _, err := u.GetMe(userID); err != nil {
-		return "", err
+// RefreshToken rotates an opaque refresh token (BE-16). The supplied token is
+// validated and consumed (single-use); a fresh access JWT and a successor
+// refresh token are returned. A consumed, revoked, expired, or forged token is
+// rejected.
+func (u *usersService) RefreshToken(refreshToken string) (string, string, error) {
+	newRefresh, userID, err := u.refresh.Rotate(refreshToken)
+	if err != nil {
+		return "", "", err
 	}
-	return u.jwks.GenerateToken(userID)
+
+	// Defence in depth: don't mint an access token for a user that no longer
+	// exists (e.g. deleted account whose refresh token wasn't revoked).
+	if _, err := u.GetMe(userID); err != nil {
+		return "", "", err
+	}
+
+	token, err := u.jwks.GenerateToken(userID)
+	if err != nil {
+		return "", "", err
+	}
+	return token, newRefresh, nil
+}
+
+// Logout denylists the supplied refresh token (BE-16). After logout the token
+// can no longer be rotated. Unknown/expired tokens are a no-op success so
+// logout is idempotent and does not leak token validity.
+func (u *usersService) Logout(refreshToken string) error {
+	return u.refresh.Revoke(refreshToken)
 }
 
 func (u *usersService) upsertWallet(walletAddress string) (*Users, error) {
