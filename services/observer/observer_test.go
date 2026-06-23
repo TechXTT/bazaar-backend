@@ -33,3 +33,26 @@ func TestHandleLog_MalformedLogsDoNotPanic(t *testing.T) {
 		})
 	}
 }
+
+// TestOrderStatusForRuling covers BE-9: orders must leave `disputed` on
+// resolution, mapping the ruling to a terminal order status that matches the
+// escrow contract's settlement.
+func TestOrderStatusForRuling(t *testing.T) {
+	cases := []struct {
+		name   string
+		ruling uint8
+		want   string
+	}{
+		{"buyer wins refunds order", 1, "cancelled"},
+		{"receiver wins releases order", 2, "released"},
+		{"refused settles to receiver", 0, "released"},
+		{"unknown ruling settles to receiver", 99, "released"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(orderStatusForRuling(tc.ruling)); got != tc.want {
+				t.Fatalf("orderStatusForRuling(%d) = %q, want %q", tc.ruling, got, tc.want)
+			}
+		})
+	}
+}

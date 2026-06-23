@@ -510,7 +510,30 @@ func (o *observer) handleDisputeResolved(vLog types.Log, contractABI abi.ABI) {
 		Updates(updates)
 	logDBErr("DisputeResolved.Updates", "DisputeResolved", orderId, res.Error)
 
+	// BE-9: move the order out of `disputed` to a terminal state derived from the
+	// ruling. The escrow's `rule` callback settles RULING_BUYER (1) by refunding
+	// the buyer (order cancelled); RULING_RECEIVER (2) and any refused/invalid
+	// ruling settle in favour of the receiver/seller (funds released). Without
+	// this the order can read `disputed` forever and reputation undercounts
+	// resolved outcomes.
+	orderStatus := orderStatusForRuling(ruling)
+	orderRes := gormDB.Model(&db.Orders{}).
+		Where("contract_order_id = ?", orderId).
+		Update("status", orderStatus)
+	logDBErr("DisputeResolved.OrderStatus", "DisputeResolved", orderId, orderRes.Error)
+
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
+}
+
+// orderStatusForRuling maps an on-chain dispute ruling to the order's terminal
+// status, matching the escrow contract: 1 (buyer wins) refunds the buyer, any
+// other value (receiver wins or refused→receiver) releases funds to the seller.
+func orderStatusForRuling(ruling uint8) db.OrderStatus {
+	const rulingBuyer = 1
+	if ruling == rulingBuyer {
+		return db.OrderStatusCancelled
+	}
+	return db.OrderStatusReleased
 }
 
 func (o *observer) handleRuling(vLog types.Log, contractABI abi.ABI) {
