@@ -78,6 +78,10 @@ func (w *web) buildRouter() {
 	// BE-15: structured request logging on every /api route, applied before the
 	// rate limiter so even throttled requests are observed.
 	w.handler.Use(requestLogger)
+	// BE-15: record Prometheus request metrics (counter + latency histogram) for
+	// every /api route, before rate limiting so throttled (429) responses are
+	// still counted.
+	w.handler.Use(requestMetrics)
 	// BE-6: apply the default per-IP rate limiter to every /api route. Modules
 	// that register auth routes additionally opt into AuthRateLimit().
 	w.handler.Use(w.defaultRL.middleware("default"))
@@ -99,6 +103,11 @@ func (w *web) buildRouter() {
 	// serve traffic by pinging the database. A failing DB returns 503 so load
 	// balancers stop routing to this instance.
 	w.handler.HandleFunc("/readyz", w.readyz).Methods(http.MethodGet)
+
+	// BE-15: Prometheus metrics. Unauthenticated by design (scrapers don't carry
+	// app auth) — MUST be network-restricted in production (internal interface /
+	// ingress allowlist) so traffic and error-rate data is not public.
+	w.handler.Handle("/metrics", metricsHandler()).Methods(http.MethodGet)
 
 	HookBuildRouter.Dispatch(w.handler)
 }

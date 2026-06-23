@@ -15,6 +15,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
 	"github.com/TechXTT/bazaar-backend/services/db"
+	"github.com/TechXTT/bazaar-backend/services/metrics"
 	"github.com/TechXTT/bazaar-backend/services/wsclient"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -153,24 +154,34 @@ func (o *observer) handleLog(vLog types.Log, contractABI abi.ABI) {
 	switch {
 	case topic == contractABI.Events["OrderCreated"].ID.Hex():
 		o.handleOrderCreated(vLog, contractABI)
+		metrics.EventProcessed("OrderCreated")
 	case topic == contractABI.Events["OrderCompleted"].ID.Hex():
 		o.handleOrderCompleted(vLog, contractABI)
+		metrics.EventProcessed("OrderCompleted")
 	case topic == contractABI.Events["OrderReleased"].ID.Hex():
 		o.handleOrderReleased(vLog, contractABI)
+		metrics.EventProcessed("OrderReleased")
 	case topic == contractABI.Events["OrderRefunded"].ID.Hex():
 		o.handleOrderRefunded(vLog, contractABI)
+		metrics.EventProcessed("OrderRefunded")
 	case topic == contractABI.Events["OrderShipped"].ID.Hex():
 		o.handleOrderShipped(vLog, contractABI)
+		metrics.EventProcessed("OrderShipped")
 	case topic == contractABI.Events["DisputeRaised"].ID.Hex():
 		o.handleDisputeRaised(vLog, contractABI)
+		metrics.EventProcessed("DisputeRaised")
 	case topic == contractABI.Events["DisputeResolved"].ID.Hex():
 		o.handleDisputeResolved(vLog, contractABI)
+		metrics.EventProcessed("DisputeResolved")
 	case topic == contractABI.Events["Ruling"].ID.Hex():
 		o.handleRuling(vLog, contractABI)
+		metrics.EventProcessed("Ruling")
 	case topic == contractABI.Events["Evidence"].ID.Hex():
 		o.handleEvidence(vLog, contractABI)
+		metrics.EventProcessed("Evidence")
 	case topic == contractABI.Events["MetaEvidence"].ID.Hex():
 		o.handleMetaEvidence(vLog, contractABI)
+		metrics.EventProcessed("MetaEvidence")
 	default:
 		log.Println("observer: unknown event topic", topic)
 	}
@@ -185,6 +196,9 @@ func logDBErr(op, topic, orderID string, err error) {
 	if err == nil {
 		return
 	}
+	// BE-15: surface the failure as a Prometheus counter so swallowed mirror
+	// writes can be alerted on, not just logged.
+	metrics.DBError(op, topic)
 	log.Printf("observer: DB error op=%s topic=%s orderId=%s: %v", op, topic, orderID, err)
 }
 
