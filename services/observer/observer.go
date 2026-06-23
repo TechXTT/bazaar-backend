@@ -316,6 +316,18 @@ func (o *observer) handleOrderCompleted(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	gormDB := o.db.DB()
+
+	// BE-18 groundwork: reconcile the DB order against the on-chain settlement
+	// amount/fee before overwriting fee. We can only log/alert today because
+	// Total is stored as a float64 in token units while Amount is an integer in
+	// minor units (the float→integer migration is BE-18); an exact equality
+	// check waits on that. Reading the row first is best-effort — a miss here
+	// must not block the status write.
+	var existing db.Orders
+	if lookup := gormDB.Where("contract_order_id = ?", orderId).First(&existing); lookup.Error == nil {
+		o.reconcileOrder("OrderCompleted", orderId, existing, ev.Amount, ev.Fee)
+	}
+
 	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Updates(map[string]interface{}{
@@ -326,6 +338,30 @@ func (o *observer) handleOrderCompleted(vLog types.Log, contractABI abi.ABI) {
 	logDBErr("OrderCompleted.Updates", "OrderCompleted", orderId, res.Error)
 
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
+}
+
+// reconcileOrder compares the DB order against the on-chain settlement
+// amount/fee and logs a warning + increments a metric on a clear mismatch
+// (BE-18 groundwork). It is intentionally conservative: because Total is a
+// float64 in token units and amount/fee are integers in minor units, it only
+// flags unambiguous divergences (e.g. a non-zero on-chain settlement against a
+// zero/unset DB Total, or an on-chain fee that disagrees with the fee already
+// recorded on the order) rather than attempting a unit-aware equality that
+// belongs in BE-18.
+func (o *observer) reconcileOrder(topic, orderID string, order db.Orders, amount, fee *big.Int) {
+	if amount != nil && amount.Sign() > 0 && order.Total <= 0 {
+		metrics.ReconcileMismatch("total", topic)
+		log.Printf("observer: reconcile mismatch op=%s orderId=%s: on-chain amount=%s but DB Total=%v",
+			topic, orderID, amount.String(), order.Total)
+	}
+
+	// If the order already carried a recorded fee, a different on-chain fee is a
+	// divergence worth surfacing (e.g. feeBps changed between create and settle).
+	if fee != nil && order.Fee != "" && order.Fee != fee.String() {
+		metrics.ReconcileMismatch("fee", topic)
+		log.Printf("observer: reconcile mismatch op=%s orderId=%s: on-chain fee=%s but DB fee=%s",
+			topic, orderID, fee.String(), order.Fee)
+	}
 }
 
 func (o *observer) handleOrderReleased(vLog types.Log, contractABI abi.ABI) {
