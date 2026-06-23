@@ -29,9 +29,9 @@ import (
 
 type (
 	Observer interface {
-		SubscribeToEvents(contractAddress common.Address, logs chan<- types.Log, contractABI abi.ABI) (ethereum.Subscription, error)
-		RunSubscription(contractABIPath string) error
-		RunBackfill(contractABIPath string, fromBlock uint64) error
+		SubscribeToEvents(ctx context.Context, contractAddress common.Address, logs chan<- types.Log, contractABI abi.ABI) (ethereum.Subscription, error)
+		RunSubscription(ctx context.Context, contractABIPath string) error
+		RunBackfill(ctx context.Context, contractABIPath string, fromBlock uint64) error
 	}
 
 	observer struct {
@@ -61,7 +61,7 @@ func NewObserver(i *do.Injector) (Observer, error) {
 	}, nil
 }
 
-func (o *observer) SubscribeToEvents(contractAddress common.Address, logs chan<- types.Log, contractABI abi.ABI) (ethereum.Subscription, error) {
+func (o *observer) SubscribeToEvents(ctx context.Context, contractAddress common.Address, logs chan<- types.Log, contractABI abi.ABI) (ethereum.Subscription, error) {
 	eventNames := []string{
 		"OrderCreated", "OrderCompleted", "OrderReleased", "OrderRefunded",
 		"OrderShipped",
@@ -80,10 +80,10 @@ func (o *observer) SubscribeToEvents(contractAddress common.Address, logs chan<-
 		Topics:    [][]common.Hash{topics},
 	}
 
-	return o.wsClient.SubscribeFilterLogs(context.Background(), query, logs)
+	return o.wsClient.SubscribeFilterLogs(ctx, query, logs)
 }
 
-func (o *observer) RunSubscription(contractABIPath string) error {
+func (o *observer) RunSubscription(ctx context.Context, contractABIPath string) error {
 	logs := make(chan types.Log)
 	contractAddress := common.HexToAddress(o.cfg.GetWs().ContractAddress)
 
@@ -107,7 +107,7 @@ func (o *observer) RunSubscription(contractABIPath string) error {
 		return err
 	}
 
-	subscription, err := o.SubscribeToEvents(contractAddress, logs, contractABI)
+	subscription, err := o.SubscribeToEvents(ctx, contractAddress, logs, contractABI)
 	if err != nil {
 		log.Println("Error subscribing to events")
 		return err
@@ -116,6 +116,10 @@ func (o *observer) RunSubscription(contractABIPath string) error {
 
 	for {
 		select {
+		case <-ctx.Done():
+			// BE-3: graceful shutdown — stop consuming and unwind cleanly.
+			log.Println("observer: context cancelled, shutting down subscription")
+			return ctx.Err()
 		case err := <-subscription.Err():
 			log.Println("observer subscription dropped:", err)
 			return err
@@ -559,7 +563,7 @@ func (o *observer) handleEvidence(vLog types.Log, contractABI abi.ABI) {
 	}).Create(&evidence)
 }
 
-func (o *observer) RunBackfill(contractABIPath string, fromBlock uint64) error {
+func (o *observer) RunBackfill(ctx context.Context, contractABIPath string, fromBlock uint64) error {
 	ethClient, err := o.wsSvc.InitEthClient()
 	if err != nil {
 		log.Println("observer backfill: failed to connect to Ethereum")
@@ -578,7 +582,7 @@ func (o *observer) RunBackfill(contractABIPath string, fromBlock uint64) error {
 
 	contractAddress := common.HexToAddress(o.cfg.GetWs().ContractAddress)
 
-	latest, err := ethClient.BlockNumber(context.Background())
+	latest, err := ethClient.BlockNumber(ctx)
 	if err != nil {
 		return err
 	}
@@ -595,12 +599,18 @@ func (o *observer) RunBackfill(contractABIPath string, fromBlock uint64) error {
 	defer func() { o.wsClient = prevClient }()
 
 	for start := fromBlock; start <= latest; start += batchSize {
+		// BE-3: stop the (potentially long) backfill promptly on shutdown.
+		if err := ctx.Err(); err != nil {
+			log.Println("observer backfill: context cancelled, stopping")
+			return err
+		}
+
 		end := start + batchSize - 1
 		if end > latest {
 			end = latest
 		}
 
-		logs, err := ethClient.FilterLogs(context.Background(), ethereum.FilterQuery{
+		logs, err := ethClient.FilterLogs(ctx, ethereum.FilterQuery{
 			FromBlock: new(big.Int).SetUint64(start),
 			ToBlock:   new(big.Int).SetUint64(end),
 			Addresses: []common.Address{contractAddress},

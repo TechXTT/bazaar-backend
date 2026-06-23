@@ -1,9 +1,12 @@
 package web
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
@@ -15,7 +18,9 @@ import (
 
 type (
 	Web interface {
-		Start() error
+		// Start serves until ctx is cancelled, then gracefully drains in-flight
+		// requests via srv.Shutdown before returning (BE-3).
+		Start(ctx context.Context) error
 	}
 
 	web struct {
@@ -85,7 +90,7 @@ func (w *web) buildRouter() {
 	HookBuildRouter.Dispatch(w.handler)
 }
 
-func (w *web) Start() error {
+func (w *web) Start(ctx context.Context) error {
 	httpCfg := w.cfg.GetHTTP()
 
 	c := cors.New(cors.Options{
@@ -106,7 +111,32 @@ func (w *web) Start() error {
 		IdleTimeout:  httpCfg.IdleTimeout,
 	}
 
-	return srv.ListenAndServe()
+	// Stop the rate-limiter sweepers once we return.
+	defer w.defaultRL.Stop()
+	defer w.authRL.Stop()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+			return
+		}
+		serveErr <- nil
+	}()
+
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+		// BE-3: graceful shutdown — give in-flight requests a bounded window to
+		// drain before forcing the listener closed.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		return <-serveErr
+	}
 }
 
 func nonEmptyList(values []string) []string {

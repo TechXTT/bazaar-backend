@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/samber/do"
@@ -23,6 +26,12 @@ import (
 )
 
 func main() {
+	// BE-3: cancel the root context on SIGINT/SIGTERM so the HTTP server,
+	// observer subscription, and backfill all unwind gracefully on deploy/dyno
+	// cycling instead of having in-flight work killed.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	i := app.Boot()
 
 	cfg := do.MustInvoke[config.Config](i)
@@ -61,7 +70,7 @@ func main() {
 
 	if cfg.GetWs().BackfillOnStartup {
 		go func() {
-			if err := ob.RunBackfill("./Escrow.json", cfg.GetWs().BackfillFromBlock); err != nil {
+			if err := ob.RunBackfill(ctx, "./Escrow.json", cfg.GetWs().BackfillFromBlock); err != nil {
 				log.Printf("backfill failed: %v", err)
 			}
 		}()
@@ -71,11 +80,19 @@ func main() {
 	go func() {
 		backoff := time.Second
 		for {
+			if ctx.Err() != nil {
+				return
+			}
 			startedAt := time.Now()
-			if err := ob.RunSubscription("./Escrow.json"); err != nil {
+			if err := ob.RunSubscription(ctx, "./Escrow.json"); err != nil {
 				log.Printf("observer exited (%v), reconnecting in %s", err, backoff)
 			}
-			time.Sleep(backoff)
+			// Stop reconnecting once the process is shutting down.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
 			if time.Since(startedAt) > 30*time.Second {
 				backoff = time.Second
 				continue
@@ -88,8 +105,8 @@ func main() {
 	}()
 
 	server := do.MustInvoke[web.Web](i)
-	err := server.Start()
-	if err != nil {
-		panic(err)
+	if err := server.Start(ctx); err != nil {
+		log.Fatalf("server error: %v", err)
 	}
+	log.Println("shutdown complete")
 }
