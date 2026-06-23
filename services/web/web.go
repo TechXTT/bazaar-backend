@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
 	"github.com/TechXTT/bazaar-backend/services/config"
+	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
 	"github.com/rs/cors"
@@ -26,6 +28,7 @@ type (
 	web struct {
 		handler   *mux.Router
 		cfg       config.Config
+		db        db.DB
 		defaultRL *rateLimiter
 		authRL    *rateLimiter
 	}
@@ -59,6 +62,7 @@ func NewWeb(i *do.Injector) (Web, error) {
 	w := &web{
 		handler: mux.NewRouter().PathPrefix("/api").Subrouter(),
 		cfg:     do.MustInvoke[config.Config](i),
+		db:      do.MustInvoke[db.DB](i),
 		// BE-6: default limiter applied to every /api route (generous), plus a
 		// strict limiter for auth endpoints to blunt nonce/verify floods.
 		defaultRL: newRateLimiter(20, 40),
@@ -71,6 +75,9 @@ func NewWeb(i *do.Injector) (Web, error) {
 }
 
 func (w *web) buildRouter() {
+	// BE-15: structured request logging on every /api route, applied before the
+	// rate limiter so even throttled requests are observed.
+	w.handler.Use(requestLogger)
 	// BE-6: apply the default per-IP rate limiter to every /api route. Modules
 	// that register auth routes additionally opt into AuthRateLimit().
 	w.handler.Use(w.defaultRL.middleware("default"))
@@ -82,12 +89,39 @@ func (w *web) buildRouter() {
 		).Methods(http.MethodGet)
 	}
 
-	w.handler.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+	// /health is a cheap liveness probe (process is up).
+	w.handler.HandleFunc("/health", func(rw http.ResponseWriter, r *http.Request) {
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte("OK"))
 	}).Methods(http.MethodGet)
 
+	// BE-15: /readyz is a readiness probe — it verifies the process can actually
+	// serve traffic by pinging the database. A failing DB returns 503 so load
+	// balancers stop routing to this instance.
+	w.handler.HandleFunc("/readyz", w.readyz).Methods(http.MethodGet)
+
 	HookBuildRouter.Dispatch(w.handler)
+}
+
+func (w *web) readyz(rw http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	sqlDB, err := w.db.DB().DB()
+	if err == nil {
+		err = sqlDB.PingContext(ctx)
+	}
+	if err != nil {
+		slog.Error("readyz: database not ready", "error", err)
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusServiceUnavailable)
+		rw.Write([]byte(`{"status":"unavailable","db":"down"}`))
+		return
+	}
+
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(http.StatusOK)
+	rw.Write([]byte(`{"status":"ready","db":"up"}`))
 }
 
 func (w *web) Start(ctx context.Context) error {
