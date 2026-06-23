@@ -176,6 +176,18 @@ func (o *observer) handleLog(vLog types.Log, contractABI abi.ABI) {
 	}
 }
 
+// logDBErr records an observer DB failure with the operation, topic, and order
+// context (BE-8). The observer's whole purpose is mirroring chain events to the
+// DB, so a swallowed write silently leaves order/dispute state wrong with no
+// retry — surfacing the error is the minimum so it can be alerted on and
+// replayed by RunBackfill.
+func logDBErr(op, topic, orderID string, err error) {
+	if err == nil {
+		return
+	}
+	log.Printf("observer: DB error op=%s topic=%s orderId=%s: %v", op, topic, orderID, err)
+}
+
 // bytes32ToUUID converts a [32]uint8 on-chain orderId (UUID bytes packed into bytes32)
 // back to a UUID string of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.
 func bytes32ToUUID(b [32]uint8) (string, error) {
@@ -258,7 +270,8 @@ func (o *observer) handleOrderCreated(vLog types.Log, contractABI abi.ABI) {
 		// No matching row yet (order created on-chain before backend API call) — skip
 		log.Println("observer: no backend order row for OrderCreated", orderId)
 	} else {
-		gormDB.Model(&db.Orders{}).Where("contract_order_id = ?", orderId).Updates(updates)
+		res := gormDB.Model(&db.Orders{}).Where("contract_order_id = ?", orderId).Updates(updates)
+		logDBErr("OrderCreated.Updates", "OrderCreated", orderId, res.Error)
 	}
 }
 
@@ -289,13 +302,14 @@ func (o *observer) handleOrderCompleted(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	gormDB := o.db.DB()
-	gormDB.Model(&db.Orders{}).
+	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Updates(map[string]interface{}{
 			"status":  db.OrderStatusCompleted,
 			"tx_hash": vLog.TxHash.Hex(),
 			"fee":     ev.Fee.String(),
 		})
+	logDBErr("OrderCompleted.Updates", "OrderCompleted", orderId, res.Error)
 
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
 }
@@ -314,12 +328,13 @@ func (o *observer) handleOrderReleased(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	gormDB := o.db.DB()
-	gormDB.Model(&db.Orders{}).
+	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Updates(map[string]interface{}{
 			"status":  db.OrderStatusReleased,
 			"tx_hash": vLog.TxHash.Hex(),
 		})
+	logDBErr("OrderReleased.Updates", "OrderReleased", orderId, res.Error)
 }
 
 func (o *observer) handleOrderRefunded(vLog types.Log, contractABI abi.ABI) {
@@ -348,12 +363,13 @@ func (o *observer) handleOrderRefunded(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	gormDB := o.db.DB()
-	gormDB.Model(&db.Orders{}).
+	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Updates(map[string]interface{}{
 			"status":  db.OrderStatusCancelled,
 			"tx_hash": vLog.TxHash.Hex(),
 		})
+	logDBErr("OrderRefunded.Updates", "OrderRefunded", orderId, res.Error)
 
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
 }
@@ -421,9 +437,10 @@ func (o *observer) handleDisputeRaised(vLog types.Log, contractABI abi.ABI) {
 	gormDB := o.db.DB()
 
 	// Update order status to disputed
-	gormDB.Model(&db.Orders{}).
+	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Update("status", db.OrderStatusDisputed)
+	logDBErr("DisputeRaised.OrderStatus", "DisputeRaised", orderId, res.Error)
 
 	// Find order row
 	var order db.Orders
@@ -488,9 +505,10 @@ func (o *observer) handleDisputeResolved(vLog types.Log, contractABI abi.ABI) {
 	if val, ok := o.pendingRulings.LoadAndDelete(vLog.TxHash.Hex()); ok {
 		updates["arbitrator_dispute_id"] = val
 	}
-	gormDB.Model(&db.Disputes{}).
+	res := gormDB.Model(&db.Disputes{}).
 		Where("order_id = ?", order.ID).
 		Updates(updates)
+	logDBErr("DisputeResolved.Updates", "DisputeResolved", orderId, res.Error)
 
 	o.upsertReputation(o.sellerWalletForContractOrder(orderId))
 }
@@ -557,10 +575,11 @@ func (o *observer) handleEvidence(vLog types.Log, contractABI abi.ABI) {
 		LogIndex:  uint(vLog.Index),
 	}
 
-	gormDB.Clauses(clause.OnConflict{
+	res := gormDB.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "tx_hash"}, {Name: "log_index"}},
 		DoNothing: true,
 	}).Create(&evidence)
+	logDBErr("Evidence.Create", "Evidence", orderId, res.Error)
 }
 
 func (o *observer) RunBackfill(ctx context.Context, contractABIPath string, fromBlock uint64) error {
@@ -634,7 +653,7 @@ func (o *observer) RunBackfill(ctx context.Context, contractABIPath string, from
 
 func (o *observer) sellerWalletForContractOrder(contractOrderID string) string {
 	var result struct{ WalletAddress string }
-	o.db.DB().Raw(`
+	res := o.db.DB().Raw(`
 		SELECT u.wallet_address
 		FROM orders o
 		JOIN products pr ON o.product_id = pr.id
@@ -643,6 +662,7 @@ func (o *observer) sellerWalletForContractOrder(contractOrderID string) string {
 		WHERE o.contract_order_id = ?
 		LIMIT 1
 	`, contractOrderID).Scan(&result)
+	logDBErr("sellerWalletForContractOrder.Scan", "", contractOrderID, res.Error)
 	return strings.ToLower(result.WalletAddress)
 }
 
@@ -661,7 +681,7 @@ func (o *observer) upsertReputation(sellerWallet string) {
 		BuyerWon        int
 	}
 
-	gormDB.Raw(`
+	statsRes := gormDB.Raw(`
 		SELECT
 			COUNT(DISTINCT o.id) AS total_orders,
 			COUNT(DISTINCT o.id) FILTER (WHERE o.status = 'completed') AS completed_orders,
@@ -676,6 +696,10 @@ func (o *observer) upsertReputation(sellerWallet string) {
 		LEFT JOIN disputes d ON d.order_id = o.id AND d.status = 'resolved'
 		WHERE LOWER(u.wallet_address) = LOWER(?)
 	`, sellerWallet).Scan(&stats)
+	if statsRes.Error != nil {
+		logDBErr("upsertReputation.StatsScan", "", "", statsRes.Error)
+		return
+	}
 
 	score := computeScore(stats.CompletedOrders, stats.TotalOrders, stats.DisputeCount)
 	repID, _ := uuid.NewV4()
@@ -692,13 +716,14 @@ func (o *observer) upsertReputation(sellerWallet string) {
 		Score:            score,
 	}
 
-	gormDB.Clauses(clause.OnConflict{
+	repRes := gormDB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "seller_wallet"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"total_orders", "completed_orders", "cancelled_orders",
 			"dispute_count", "dispute_seller_won", "dispute_buyer_won", "score", "updated_at",
 		}),
 	}).Create(&rep)
+	logDBErr("upsertReputation.Create", "", sellerWallet, repRes.Error)
 }
 
 func computeScore(completed, total, disputes int) *int {
@@ -743,7 +768,8 @@ func (o *observer) handleMetaEvidence(vLog types.Log, contractABI abi.ABI) {
 	}
 
 	gormDB := o.db.DB()
-	gormDB.Model(&db.Orders{}).
+	res := gormDB.Model(&db.Orders{}).
 		Where("contract_order_id = ?", orderId).
 		Update("meta_evidence_uri", ev.Evidence)
+	logDBErr("MetaEvidence.Update", "MetaEvidence", orderId, res.Error)
 }
