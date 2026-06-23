@@ -106,6 +106,11 @@ func (s *disputesService) canAccessOrder(userID string, orderId string) (bool, e
 		return false, err
 	}
 
-	requesterID := uuid.FromStringOrNil(userID)
-	return order.BuyerID == requesterID || order.Product.Store.OwnerID == requesterID, nil
+	return orderAccessibleBy(&order, uuid.FromStringOrNil(userID)), nil
+}
+
+// orderAccessibleBy is the IDOR guard shared by the dispute reads: only the
+// order's buyer or the seller (store owner) may access it.
+func orderAccessibleBy(order *Orders, requesterID uuid.UUID) bool {
+	return order.BuyerID == requesterID || order.Product.Store.OwnerID == requesterID
 }

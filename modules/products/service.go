@@ -228,11 +228,17 @@ func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
 	}
 
 	requesterID := uuid.FromStringOrNil(userId)
-	if order.BuyerID != requesterID && order.Product.Store.OwnerID != requesterID {
+	if !canAccessOrder(&order, requesterID) {
 		return nil, ErrUnauthorized
 	}
 
 	return &order, nil
+}
+
+// canAccessOrder is the IDOR guard for GetOrder: only the buyer or the seller
+// (the owner of the product's store) may read an order.
+func canAccessOrder(order *Orders, requesterID uuid.UUID) bool {
+	return order.BuyerID == requesterID || order.Product.Store.OwnerID == requesterID
 }
 
 func toAlgoliaRecord(p Products) algolia.ProductRecord {
