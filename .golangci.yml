@@ -1,0 +1,14 @@
+# golangci-lint configuration.
+#
+# The only findings are errcheck on two conventional cases that cannot be
+# meaningfully handled: writing to an http.ResponseWriter (the client is already
+# disconnected if it fails) and json-encoding directly to a response stream.
+# These are standard-library types, so the exclusions are exact.
+run:
+  timeout: 5m
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (net/http.ResponseWriter).Write
+      - (*encoding/json.Encoder).Encode

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
@@ -37,14 +38,14 @@ func NewStoresHandler(i *do.Injector) (Handler, error) {
 func (s *storesHandler) Gets(w http.ResponseWriter, r *http.Request) {
 	stores, err := s.svc.GetStores()
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(stores); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 }
@@ -59,7 +60,7 @@ func (s *storesHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	store, err := s.svc.GetStore(storeId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -78,7 +79,7 @@ func (s *storesHandler) GetReputation(w http.ResponseWriter, r *http.Request) {
 
 	rep, err := s.svc.GetStoreReputation(storeId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -88,11 +89,11 @@ func (s *storesHandler) GetReputation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	store := &Stores{}
 	if err := json.NewDecoder(r.Body).Decode(store); err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 	if store.Name == "" {
@@ -101,7 +102,7 @@ func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.CreateStore(userId, store); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -111,7 +112,7 @@ func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
@@ -122,12 +123,12 @@ func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	store := &Stores{}
 	if err := json.NewDecoder(r.Body).Decode(store); err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.svc.UpdateStore(userId, storeId, store); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -136,7 +137,7 @@ func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
@@ -146,7 +147,7 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.DeleteStore(userId, storeId); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -155,18 +156,18 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	stores, err := s.svc.GetUserStores(userId)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(stores); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 }

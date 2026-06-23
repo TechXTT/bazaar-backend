@@ -1,0 +1,27 @@
+# Keep the build context small and avoid baking secrets / local artifacts.
+
+# VCS
+.git
+.gitignore
+
+# Secrets & environment (never bake into the image)
+.env
+.env.*
+*.pem
+.dev/
+*.s3cfg
+
+# Prebuilt local binary (the image rebuilds from source)
+bin/
+
+# Local runtime artifacts (uploads are a runtime volume, not part of the build)
+uploads/
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+
+# Docs / CI that don't affect the build
+README.md
+LICENSE
+Procfile

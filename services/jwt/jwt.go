@@ -21,6 +21,22 @@ import (
 	"github.com/samber/do"
 )
 
+// BE-16: token policy constants.
+const (
+	tokenTTL      = time.Hour
+	tokenIssuer   = "bazaar"
+	tokenAudience = "bazaar-api"
+)
+
+// newJTI returns a random, URL-safe unique token id (jti).
+func newJTI() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", b), nil
+}
+
 var devKey struct {
 	sync.Once
 	private *rsa.PrivateKey
@@ -62,10 +78,22 @@ func (j *jwks) GenerateToken(id string) (string, error) {
 		return "", err
 	}
 
+	// BE-16: shorten the lifetime from 24h to 1h and add jti (unique token id),
+	// iat (issued-at), and aud (audience) so tokens are individually
+	// identifiable (enabling future revocation/denylist) and bound to this API.
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
+
+	now := time.Now()
 	claims := jwt.RegisteredClaims{
-		Issuer:    "bazaar",
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24)),
-		ID:        id,
+		Issuer:    tokenIssuer,
+		Audience:  jwt.ClaimStrings{tokenAudience},
+		Subject:   id,  // the user UUID
+		ID:        jti, // unique token id (jti) for future revocation
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
@@ -84,7 +112,14 @@ func (j *jwks) ValidateToken(token string) (string, error) {
 		return "", err
 	}
 
-	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}))
+	// BE-16: pin the algorithm, require an expiry, and bind to this API's
+	// audience and issuer so tokens minted for another service cannot be
+	// replayed here.
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Name}),
+		jwt.WithAudience(tokenAudience),
+		jwt.WithIssuer(tokenIssuer),
+	)
 
 	parsedToken, err := parser.ParseWithClaims(
 		token,
@@ -101,7 +136,15 @@ func (j *jwks) ValidateToken(token string) (string, error) {
 		return "", errors.New("invalid claims")
 	}
 
-	return claims.ID, nil
+	if claims.Subject == "" {
+		return "", errors.New("token missing subject")
+	}
+	// Require an explicit expiry (v5.0.0 has no WithExpirationRequired option).
+	if claims.ExpiresAt == nil {
+		return "", errors.New("token missing expiry")
+	}
+
+	return claims.Subject, nil
 }
 
 func (j *jwks) privateKey() (*rsa.PrivateKey, error) {

@@ -29,11 +29,18 @@ type (
 		IndexProduct(p ProductRecord) error
 		DeleteProduct(id string) error
 		BulkIndex(products []ProductRecord) error
+
+		// EnqueueIndex / EnqueueDelete submit an index mutation to a bounded,
+		// retrying background queue (BE-19). They never block the caller and never
+		// spawn an unbounded goroutine.
+		EnqueueIndex(p ProductRecord)
+		EnqueueDelete(id string)
 	}
 
 	algoliaService struct {
 		client *algoliasearch.APIClient
 		index  string
+		queue  *queue
 	}
 
 	noopService struct{}
@@ -58,7 +65,9 @@ func NewAlgoliaService(i *do.Injector) (AlgoliaService, error) {
 		return nil, err
 	}
 
-	return &algoliaService{client: client, index: cfg.ProductsIndex}, nil
+	svc := &algoliaService{client: client, index: cfg.ProductsIndex}
+	svc.queue = newQueue(svc)
+	return svc, nil
 }
 
 func toMap(p ProductRecord) map[string]any {
@@ -106,6 +115,16 @@ func (s *algoliaService) BulkIndex(products []ProductRecord) error {
 	return err
 }
 
-func (n *noopService) IndexProduct(_ ProductRecord) error  { return nil }
-func (n *noopService) DeleteProduct(_ string) error        { return nil }
-func (n *noopService) BulkIndex(_ []ProductRecord) error   { return nil }
+func (s *algoliaService) EnqueueIndex(p ProductRecord) {
+	s.queue.enqueue(indexJob{kind: jobIndex, record: p})
+}
+
+func (s *algoliaService) EnqueueDelete(id string) {
+	s.queue.enqueue(indexJob{kind: jobDelete, id: id})
+}
+
+func (n *noopService) IndexProduct(_ ProductRecord) error { return nil }
+func (n *noopService) DeleteProduct(_ string) error       { return nil }
+func (n *noopService) BulkIndex(_ []ProductRecord) error  { return nil }
+func (n *noopService) EnqueueIndex(_ ProductRecord)       {}
+func (n *noopService) EnqueueDelete(_ string)             {}

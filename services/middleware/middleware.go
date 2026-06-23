@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,23 @@ import (
 	"github.com/mikestefanello/hooks"
 	"github.com/samber/do"
 )
+
+// contextKey is an unexported type for request-context keys so they cannot
+// collide with keys from other packages.
+type contextKey string
+
+// userIDKey is the context key under which the authenticated user's UUID is
+// stored by AuthMiddleware (BE-17).
+const userIDKey contextKey = "user_id"
+
+// UserID returns the authenticated user's UUID from the request context, or ""
+// if the request did not pass through AuthMiddleware.
+func UserID(r *http.Request) string {
+	if v, ok := r.Context().Value(userIDKey).(string); ok {
+		return v
+	}
+	return ""
+}
 
 type (
 	// Service is the middleware service interface
@@ -53,9 +71,10 @@ func (m *middleware) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		r.Header.Set("user_id", id)
-
-		next.ServeHTTP(w, r)
+		// BE-17: carry identity in the request context instead of mutating a
+		// request header, which any later handler could overwrite or spoof.
+		ctx := context.WithValue(r.Context(), userIDKey, id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

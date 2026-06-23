@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -23,8 +24,12 @@ import (
 
 type (
 	S3Spaces interface {
-		// SaveFile saves a file to the object storage
-		SaveFile(file multipart.File, filepath string) (string, error)
+		// SaveImage validates that the uploaded file is an allowed image type,
+		// generates a server-side object key (keyPrefix/<uuid>.<ext>) that never
+		// trusts the client filename, and persists it via the configured driver.
+		// keyPrefix is sanitized to reject path traversal. This is the only
+		// supported entrypoint for user uploads (BE-5).
+		SaveImage(file multipart.File, keyPrefix string) (string, error)
 	}
 
 	s3spaces struct {
@@ -72,23 +77,43 @@ func NewS3Spaces(i *do.Injector) (S3Spaces, error) {
 	}, nil
 }
 
-func (s *s3spaces) SaveFile(file multipart.File, filePath string) (string, error) {
+func (s *s3spaces) SaveImage(file multipart.File, keyPrefix string) (string, error) {
+	// BE-5: validate content type against an image allowlist for ALL drivers and
+	// derive the extension from the sniffed bytes, never the client filename.
+	ext, err := detectImageExt(file)
+	if err != nil {
+		return "", err
+	}
+
+	key, err := buildObjectKey(keyPrefix, ext)
+	if err != nil {
+		return "", err
+	}
+
 	switch s.cfg.GetS3Spaces().StorageDriver {
 	case "local":
-		return s.saveLocalFile(file, filePath)
+		return s.saveLocalFile(file, key)
 	case "ipfs":
-		return s.saveIPFS(file, filePath)
+		return s.saveIPFS(file, key)
 	default:
-		return s.saveS3(file, filePath)
+		return s.saveS3(file, key)
 	}
 }
 
-func (s *s3spaces) saveS3(file multipart.File, filepath string) (string, error) {
+func (s *s3spaces) saveS3(file multipart.File, key string) (string, error) {
 	s3SpacesCfg := s.cfg.GetS3Spaces()
+
+	// BE-5: defence-in-depth — reject traversal even though SaveImage already
+	// produces a server-controlled key. An object key must not contain "..", be
+	// absolute, or be empty after cleaning.
+	cleanKey := strings.TrimPrefix(path.Clean("/"+key), "/")
+	if cleanKey == "" || cleanKey == "." || strings.Contains(cleanKey, "..") {
+		return "", fmt.Errorf("invalid object key")
+	}
 
 	_, err := s.client.PutObject(&s3.PutObjectInput{
 		Bucket: aws.String(s3SpacesCfg.SpacesName),
-		Key:    aws.String(filepath),
+		Key:    aws.String(cleanKey),
 		Body:   file,
 		ACL:    aws.String("public-read"),
 	})
@@ -98,10 +123,10 @@ func (s *s3spaces) saveS3(file multipart.File, filepath string) (string, error) 
 	}
 
 	if s3SpacesCfg.SpacesCDNBase == "" {
-		return filepath, nil
+		return cleanKey, nil
 	}
 
-	return fmt.Sprintf("%s/%s", strings.TrimRight(s3SpacesCfg.SpacesCDNBase, "/"), filepath), nil
+	return fmt.Sprintf("%s/%s", strings.TrimRight(s3SpacesCfg.SpacesCDNBase, "/"), cleanKey), nil
 }
 
 func (s *s3spaces) saveLocalFile(file multipart.File, path string) (string, error) {

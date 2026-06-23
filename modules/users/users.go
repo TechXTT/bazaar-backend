@@ -3,6 +3,7 @@ package users
 import (
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/app"
@@ -10,6 +11,7 @@ import (
 	"github.com/TechXTT/bazaar-backend/services/db"
 	"github.com/TechXTT/bazaar-backend/services/jwt"
 	"github.com/TechXTT/bazaar-backend/services/middleware"
+	"github.com/TechXTT/bazaar-backend/services/refreshtoken"
 	"github.com/TechXTT/bazaar-backend/services/web"
 	"github.com/gorilla/mux"
 	"github.com/mikestefanello/hooks"
@@ -27,8 +29,9 @@ type (
 		// GetNonce returns a one-time nonce for the given wallet address
 		GetNonce(walletAddress string) (string, error)
 
-		// VerifySIWE verifies a SIWE message+signature and returns a JWT
-		VerifySIWE(message string, signature string) (string, *Users, error)
+		// VerifySIWE verifies a SIWE message+signature and returns a short-lived
+		// access JWT, an opaque refresh token, and the user (BE-16).
+		VerifySIWE(message string, signature string) (token string, refresh string, u *Users, err error)
 
 		// UpdateUser updates display name fields for the user identified by UUID
 		UpdateUser(userID string, u *Users) error
@@ -39,8 +42,14 @@ type (
 		// GetMe returns the user for the given UUID (the JWT subject)
 		GetMe(userID string) (*Users, error)
 
-		// RefreshToken issues a fresh JWT for an already-authenticated user (by UUID)
-		RefreshToken(userID string) (string, error)
+		// RefreshToken rotates an opaque refresh token (single-use): it validates
+		// the supplied refresh token, invalidates it, and returns a fresh access
+		// JWT plus a new refresh token (BE-16).
+		RefreshToken(refreshToken string) (token string, newRefresh string, err error)
+
+		// Logout denylists the supplied refresh token so it can no longer be
+		// rotated (BE-16).
+		Logout(refreshToken string) error
 	}
 
 	// Handler provides the users HTTP handlers
@@ -60,15 +69,20 @@ type (
 		// Me handles GET /api/users/me
 		Me(w http.ResponseWriter, r *http.Request)
 
-		// Refresh handles POST /api/users/refresh
+		// Refresh handles POST /api/auth/refresh
 		Refresh(w http.ResponseWriter, r *http.Request)
+
+		// Logout handles POST /api/auth/logout
+		Logout(w http.ResponseWriter, r *http.Request)
 	}
 
 	usersService struct {
-		db     db.DB
-		jwks   jwt.Jwks
-		cfg    config.Config
-		nonces sync.Map // walletAddress -> nonceEntry
+		db         db.DB
+		jwks       jwt.Jwks
+		refresh    refreshtoken.Service
+		cfg        config.Config
+		nonces     sync.Map     // walletAddress -> nonceEntry
+		nonceCount atomic.Int64 // BE-6: bounds the nonce store
 	}
 
 	usersHandler struct {
@@ -92,10 +106,18 @@ func init() {
 		authenticatedHandler.HandleFunc("/users", h.Update).Methods(http.MethodPut)
 		authenticatedHandler.HandleFunc("/users", h.Delete).Methods(http.MethodDelete)
 		authenticatedHandler.HandleFunc("/users/me", h.Me).Methods(http.MethodGet)
-		authenticatedHandler.HandleFunc("/users/refresh", h.Refresh).Methods(http.MethodPost)
 
-		// Public SIWE endpoints
-		e.Msg.HandleFunc("/auth/nonce", h.Nonce).Methods(http.MethodPost)
-		e.Msg.HandleFunc("/auth/verify", h.Verify).Methods(http.MethodPost)
+		// Public SIWE + token endpoints. BE-6: subject them to the strict auth
+		// rate limiter so the unbounded nonce store and signature verification
+		// cannot be flooded from a single source. BE-16: refresh and logout take
+		// an opaque refresh token in the body (not the access JWT) so they live
+		// here, not behind AuthMiddleware — the access token may legitimately be
+		// expired when the client refreshes.
+		authHandler := e.Msg.NewRoute().Subrouter()
+		authHandler.Use(web.AuthRateLimit())
+		authHandler.HandleFunc("/auth/nonce", h.Nonce).Methods(http.MethodPost)
+		authHandler.HandleFunc("/auth/verify", h.Verify).Methods(http.MethodPost)
+		authHandler.HandleFunc("/auth/refresh", h.Refresh).Methods(http.MethodPost)
+		authHandler.HandleFunc("/auth/logout", h.Logout).Methods(http.MethodPost)
 	})
 }

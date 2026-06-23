@@ -69,7 +69,7 @@ func (p *productsService) CreateProduct(userId string, product *Products) (strin
 	}
 
 	saved := p.load(uuid.FromStringOrNil(id))
-	go p.algolia.IndexProduct(toAlgoliaRecord(saved))
+	p.algolia.EnqueueIndex(toAlgoliaRecord(saved))
 
 	return id, nil
 }
@@ -81,7 +81,7 @@ func (p *productsService) UpdateProduct(userId string, id string, product *Produ
 	}
 
 	updated := p.load(uuid.FromStringOrNil(id))
-	go p.algolia.IndexProduct(toAlgoliaRecord(updated))
+	p.algolia.EnqueueIndex(toAlgoliaRecord(updated))
 
 	return nil
 }
@@ -92,7 +92,7 @@ func (p *productsService) DeleteProduct(userId string, id string) error {
 		return err
 	}
 
-	go p.algolia.DeleteProduct(id)
+	p.algolia.EnqueueDelete(id)
 
 	return nil
 }
@@ -134,74 +134,97 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 
 	var orderResponses []OrderResponse
 
-	for _, orderData := range ordersData {
-		product, ok := productByID[orderData.ProductID]
-		if !ok {
-			return nil, ErrNotFound
+	// BE-4: create every order for a (possibly multi-item) cart atomically.
+	// Previously each order was inserted and then a *second*, untransacted write
+	// set contract_order_id — so a failure left an orphaned order with an empty
+	// contract_order_id the observer could never link to chain, and a mid-loop
+	// failure committed earlier items while later ones failed, diverging the DB
+	// from on-chain escrow. Wrapping the batch in a transaction makes both the
+	// per-item insert+update and the whole batch all-or-nothing.
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		for _, orderData := range ordersData {
+			product, ok := productByID[orderData.ProductID]
+			if !ok {
+				return ErrNotFound
+			}
+
+			owner := product.Store.Owner
+
+			if owner.WalletAddress == "" {
+				return fmt.Errorf("%w: owner wallet address not found", ErrInvalidInput)
+			}
+
+			if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
+				return fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
+			}
+
+			order := Orders{
+				ProductID: orderData.ProductID,
+				BuyerID:   uuid.FromStringOrNil(userId),
+				Quantity:  orderData.Quantity,
+			}
+			order.CreatedAt = orderData.CreatedAt
+
+			if owner.ID == order.BuyerID {
+				return fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
+			}
+
+			order.Total = float64(order.Quantity) * product.Price
+			if err := tx.Create(&order).Error; err != nil {
+				return err
+			}
+
+			// The on-chain escrow keys orders by this backend UUID, and the observer
+			// matches incoming events on contract_order_id. Seed it with the order's
+			// UUID so the two stay linked (the local Orders struct has no such field,
+			// so update the column directly).
+			if err := tx.Model(&Orders{}).Where("id = ?", order.ID).
+				Update("contract_order_id", order.ID.String()).Error; err != nil {
+				return err
+			}
+
+			orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
 		}
-
-		owner := product.Store.Owner
-
-		if owner.WalletAddress == "" {
-			return nil, fmt.Errorf("%w: owner wallet address not found", ErrInvalidInput)
-		}
-
-		if strings.EqualFold(owner.WalletAddress, orderData.BuyerAddress) {
-			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
-		}
-
-		order := Orders{
-			ProductID: orderData.ProductID,
-			BuyerID:   uuid.FromStringOrNil(userId),
-			Quantity:  orderData.Quantity,
-		}
-		order.CreatedAt = orderData.CreatedAt
-
-		if owner.ID == order.BuyerID {
-			return nil, fmt.Errorf("%w: owner and buyer cannot be the same", ErrInvalidInput)
-		}
-
-		order.Total = float64(order.Quantity) * product.Price
-		if err := db.Create(&order).Error; err != nil {
-			return nil, err
-		}
-
-		// The on-chain escrow keys orders by this backend UUID, and the observer
-		// matches incoming events on contract_order_id. Seed it with the order's
-		// UUID so the two stay linked (the local Orders struct has no such field,
-		// so update the column directly).
-		if err := db.Model(&Orders{}).Where("id = ?", order.ID).
-			Update("contract_order_id", order.ID.String()).Error; err != nil {
-			return nil, err
-		}
-
-		orderResponses = append(orderResponses, OrderResponse{ID: order.ID.String(), OwnerAddress: owner.WalletAddress})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return orderResponses, nil
 }
 
-func (p *productsService) GetOrders(userId string, filter string) ([]Orders, error) {
-	db := p.db.DB()
+func (p *productsService) GetOrders(userId string, filter string, cursor string, limit int) ([]Orders, error) {
+	// BE-10: page the result with the existing created_at cursor pattern instead
+	// of returning every row unbounded.
+	if limit <= 0 {
+		limit = 20
+	}
+
+	db := p.db.DB().Preload("Product")
+
+	switch filter {
+	case "receiving":
+		db = db.Where("buyer_id = ?", userId)
+	case "sending":
+		db = db.Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId)
+	default:
+		db = db.Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId)
+	}
+
+	if cursor != "" {
+		db = db.Where("orders.created_at < ?", cursor)
+	}
 
 	var orders []Orders
-	var err error
-	if filter == "receiving" {
-		err = db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders).Error
-	} else if filter == "sending" {
-		err = db.Preload("Product").Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId).Find(&orders).Error
-	} else {
-		err = db.Preload("Product").Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId).Find(&orders).Error
-	}
-	if err != nil {
+	if err := db.Order("orders.created_at desc").Limit(limit).Find(&orders).Error; err != nil {
 		return nil, err
 	}
 
 	return orders, nil
 }
 
-func (p *productsService) SaveFile(file multipart.File, filepath string) (string, error) {
-	return p.s3spaces.SaveFile(file, filepath)
+func (p *productsService) SaveImage(file multipart.File, keyPrefix string) (string, error) {
+	return p.s3spaces.SaveImage(file, keyPrefix)
 }
 
 func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
@@ -216,11 +239,17 @@ func (p *productsService) GetOrder(userId string, id string) (*Orders, error) {
 	}
 
 	requesterID := uuid.FromStringOrNil(userId)
-	if order.BuyerID != requesterID && order.Product.Store.OwnerID != requesterID {
+	if !canAccessOrder(&order, requesterID) {
 		return nil, ErrUnauthorized
 	}
 
 	return &order, nil
+}
+
+// canAccessOrder is the IDOR guard for GetOrder: only the buyer or the seller
+// (the owner of the product's store) may read an order.
+func canAccessOrder(order *Orders, requesterID uuid.UUID) bool {
+	return order.BuyerID == requesterID || order.Product.Store.OwnerID == requesterID
 }
 
 func toAlgoliaRecord(p Products) algolia.ProductRecord {
@@ -244,16 +273,10 @@ func (p *productsService) load(productId uuid.UUID) Products {
 }
 
 func (p *productsService) save(userId uuid.UUID, product *Products) (string, error) {
-	db := p.db.DB()
-
-	existingProduct := Products{}
-	result := db.Where("name = ?", product.Name).First(&existingProduct)
-	if result.RowsAffected == 1 {
-		return "", ErrConflict
-	}
+	gormDB := p.db.DB()
 
 	existingStore := Stores{}
-	result = db.Where("id = ?", product.StoreID).First(&existingStore)
+	result := gormDB.Where("id = ?", product.StoreID).First(&existingStore)
 	if result.RowsAffected == 0 {
 		return "", ErrNotFound
 	}
@@ -262,8 +285,14 @@ func (p *productsService) save(userId uuid.UUID, product *Products) (string, err
 		return "", ErrUnauthorized
 	}
 
-	result = db.Create(&product)
+	// BE-12: rely on the DB unique index on products.name instead of a racy
+	// app-level pre-check (two concurrent creates could both pass it). Map the
+	// unique violation to ErrConflict.
+	result = gormDB.Create(&product)
 	if result.Error != nil {
+		if db.IsUniqueViolation(result.Error) {
+			return "", ErrConflict
+		}
 		return "", result.Error
 	}
 
