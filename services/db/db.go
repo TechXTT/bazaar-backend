@@ -131,6 +131,22 @@ func runMigrations(conn *gorm.DB) error {
 			return fmt.Errorf("create partial unique index on users.wallet_address: %w", err)
 		}
 
+		// BE-12: stores.name and products.name must be unique (the old struct tags
+		// `gorm:"unique, not null"` were malformed and applied neither). Ensure the
+		// partial unique indexes exist (scoped to live rows so soft-deletes don't
+		// block re-creating a name). These complement the model tags for DBs that
+		// predate them. Non-destructive.
+		for table, idx := range map[string]string{
+			"stores":   "idx_stores_name",
+			"products": "idx_products_name",
+		} {
+			if err := tx.Exec(
+				fmt.Sprintf("CREATE UNIQUE INDEX IF NOT EXISTS %s ON %s (name) WHERE deleted_at IS NULL", idx, table),
+			).Error; err != nil {
+				log.Printf("BE-12: could not create unique index %s on %s.name (likely existing duplicates): %v", idx, table, err)
+			}
+		}
+
 		// The Disputes model declares `order_id` as a uniqueIndex, but AutoMigrate
 		// will not upgrade a pre-existing non-unique index in place. The observer's
 		// `ON CONFLICT (order_id)` upsert needs the unique constraint. Create it

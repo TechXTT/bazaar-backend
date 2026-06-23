@@ -273,16 +273,10 @@ func (p *productsService) load(productId uuid.UUID) Products {
 }
 
 func (p *productsService) save(userId uuid.UUID, product *Products) (string, error) {
-	db := p.db.DB()
-
-	existingProduct := Products{}
-	result := db.Where("name = ?", product.Name).First(&existingProduct)
-	if result.RowsAffected == 1 {
-		return "", ErrConflict
-	}
+	gormDB := p.db.DB()
 
 	existingStore := Stores{}
-	result = db.Where("id = ?", product.StoreID).First(&existingStore)
+	result := gormDB.Where("id = ?", product.StoreID).First(&existingStore)
 	if result.RowsAffected == 0 {
 		return "", ErrNotFound
 	}
@@ -291,8 +285,14 @@ func (p *productsService) save(userId uuid.UUID, product *Products) (string, err
 		return "", ErrUnauthorized
 	}
 
-	result = db.Create(&product)
+	// BE-12: rely on the DB unique index on products.name instead of a racy
+	// app-level pre-check (two concurrent creates could both pass it). Map the
+	// unique violation to ErrConflict.
+	result = gormDB.Create(&product)
 	if result.Error != nil {
+		if db.IsUniqueViolation(result.Error) {
+			return "", ErrConflict
+		}
 		return "", result.Error
 	}
 

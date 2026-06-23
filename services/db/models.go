@@ -56,7 +56,7 @@ func (u *Users) BeforeCreate(tx *gorm.DB) (err error) {
 type Stores struct {
 	gorm.Model
 	ID         uuid.UUID         `gorm:"primaryKey"`
-	Name       string            `gorm:"not null" json:"name"`
+	Name       string            `gorm:"not null;uniqueIndex:idx_stores_name,where:deleted_at IS NULL" json:"name"`
 	OwnerID    uuid.UUID         `gorm:"not null;index" json:"owner_id"`
 	Owner      Users             `gorm:"foreignKey:OwnerID"`
 	Products   []Products        `gorm:"foreignKey:StoreID"`
@@ -73,7 +73,7 @@ func (s *Stores) BeforeCreate(tx *gorm.DB) (err error) {
 type Products struct {
 	gorm.Model
 	ID          uuid.UUID `gorm:"primaryKey"`
-	Name        string    `gorm:"not null"`
+	Name        string    `gorm:"not null;uniqueIndex:idx_products_name,where:deleted_at IS NULL"`
 	ImageURL    string    `gorm:"not null"`
 	Price       float64   `gorm:"not null"`
 	Unit        string    `gorm:"not null"`

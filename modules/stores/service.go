@@ -141,24 +141,23 @@ func (s *storesService) load(storeId uuid.UUID) (Stores, error) {
 }
 
 func (s *storesService) save(userId uuid.UUID, store *Stores) error {
-	db := s.db.DB()
+	gormDB := s.db.DB()
 
 	user := Users{}
-	db.Where("id = ?", userId).First(&user)
+	gormDB.Where("id = ?", userId).First(&user)
 	if user.WalletAddress == "" {
 		return fmt.Errorf("%w: user has not set wallet address", ErrInvalidInput)
 	}
 
-	existingStore := Stores{}
-	result := db.Where("name = ?", store.Name).First(&existingStore)
-	if result.RowsAffected == 1 {
-		return ErrConflict
-	}
-
 	store.OwnerID = userId
 
-	result = db.Create(&store)
+	// BE-12: rely on the DB unique index on stores.name instead of a racy
+	// app-level pre-check. Map the unique violation to ErrConflict.
+	result := gormDB.Create(&store)
 	if result.Error != nil {
+		if db.IsUniqueViolation(result.Error) {
+			return ErrConflict
+		}
 		return result.Error
 	}
 
