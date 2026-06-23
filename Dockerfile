@@ -53,4 +53,8 @@ USER nonroot:nonroot
 # HTTP_PORT defaults to 8000 (config.go); server binds ":8000".
 EXPOSE 8000
 
+# Self-probe via the binary's -healthcheck flag (distroless has no shell/wget).
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=5 \
+    CMD ["/app/bazaar-backend", "-healthcheck"]
+
 ENTRYPOINT ["/app/bazaar-backend"]

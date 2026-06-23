@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -25,7 +28,34 @@ import (
 	_ "github.com/TechXTT/bazaar-backend/modules/users"
 )
 
+// healthcheck performs an in-container liveness probe by hitting the local
+// /health endpoint, then exits 0 (healthy) or 1. The production image is
+// distroless (no shell/wget), so Docker/compose probe it via `bazaar-backend
+// -healthcheck` instead of a shell command.
+func healthcheck() {
+	port := os.Getenv("HTTP_PORT")
+	if port == "" {
+		port = "8000"
+	}
+	client := http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/health")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "healthcheck:", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "healthcheck: unhealthy status %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+}
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-healthcheck" {
+		healthcheck()
+		return
+	}
+
 	// BE-3: cancel the root context on SIGINT/SIGTERM so the HTTP server,
 	// observer subscription, and backfill all unwind gracefully on deploy/dyno
 	// cycling instead of having in-flight work killed.
