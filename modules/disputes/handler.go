@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
 )
@@ -29,7 +30,7 @@ func NewDisputesHandler(i *do.Injector) (Handler, error) {
 }
 
 func (d *disputesHandler) GetDisputes(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 
 	disputes, err := d.svc.ListDisputes(userID)
 	if err != nil {
@@ -42,7 +43,7 @@ func (d *disputesHandler) GetDisputes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *disputesHandler) GetDispute(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 	vars := mux.Vars(r)
 	orderId := vars["orderId"]
 	if orderId == "" {
@@ -61,7 +62,7 @@ func (d *disputesHandler) GetDispute(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *disputesHandler) GetEvidence(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 	vars := mux.Vars(r)
 	orderId := vars["orderId"]
 	if orderId == "" {

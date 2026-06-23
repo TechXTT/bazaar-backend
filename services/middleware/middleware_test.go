@@ -57,7 +57,7 @@ func TestAuthMiddleware_Flow(t *testing.T) {
 
 	var seenUserID string
 	protected := mw.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenUserID = r.Header.Get("user_id")
+		seenUserID = UserID(r)
 		w.WriteHeader(http.StatusOK)
 	}))
 

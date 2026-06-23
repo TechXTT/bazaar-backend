@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
@@ -84,7 +85,7 @@ func (s *productsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	product := &Products{}
 
@@ -149,7 +150,7 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	productId := vars["id"]
@@ -174,7 +175,7 @@ func (s *productsHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	productId := vars["id"]
@@ -230,7 +231,7 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	// body is data:  []Orders
 	orders := &OrderRequest{}
@@ -251,7 +252,7 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 	filter := r.URL.Query().Get("filter")
 
 	orders, err := s.svc.GetOrders(userId, filter)
@@ -265,7 +266,7 @@ func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *productsHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 	vars := mux.Vars(r)
 	orderId := vars["id"]
 	if _, err := uuid.FromString(orderId); err != nil {

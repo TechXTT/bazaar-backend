@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/samber/do"
 )
 
@@ -64,7 +65,7 @@ func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 
 	var body Users
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -81,7 +82,7 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 
 	if err := u.svc.DeleteUser(userID); err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -92,7 +93,7 @@ func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 
 	user, err := u.svc.GetMe(userID)
 	if err != nil {
@@ -104,7 +105,7 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (u *usersHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	userID := r.Header.Get("user_id")
+	userID := middleware.UserID(r)
 
 	token, err := u.svc.RefreshToken(userID)
 	if err != nil {

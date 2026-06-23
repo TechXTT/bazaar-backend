@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/TechXTT/bazaar-backend/pkg/httpjson"
+	"github.com/TechXTT/bazaar-backend/services/middleware"
 	"github.com/gofrs/uuid/v5"
 	"github.com/gorilla/mux"
 	"github.com/samber/do"
@@ -88,7 +89,7 @@ func (s *storesHandler) GetReputation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	store := &Stores{}
 	if err := json.NewDecoder(r.Body).Decode(store); err != nil {
@@ -111,7 +112,7 @@ func (s *storesHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
@@ -136,7 +137,7 @@ func (s *storesHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	vars := mux.Vars(r)
 	storeId := vars["id"]
@@ -155,7 +156,7 @@ func (s *storesHandler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *storesHandler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userId := r.Header.Get("user_id")
+	userId := middleware.UserID(r)
 
 	stores, err := s.svc.GetUserStores(userId)
 	if err != nil {
