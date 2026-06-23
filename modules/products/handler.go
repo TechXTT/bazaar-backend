@@ -254,14 +254,28 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	userId := middleware.UserID(r)
 	filter := r.URL.Query().Get("filter")
+	cursor := r.URL.Query().Get("cursor")
 
-	orders, err := s.svc.GetOrders(userId, filter)
+	limit := 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		parsed, err := strconv.Atoi(limitStr)
+		if err != nil || parsed <= 0 || parsed > 100 {
+			httpjson.WriteError(w, http.StatusBadRequest, "invalid limit")
+			return
+		}
+		limit = parsed
+	}
+
+	orders, err := s.svc.GetOrders(userId, filter, cursor, limit)
 	if err != nil {
 		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if len(orders) > 0 {
+		w.Header().Set("next-cursor", orders[len(orders)-1].CreatedAt.String())
+	}
 	json.NewEncoder(w).Encode(orders)
 }
 

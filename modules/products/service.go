@@ -193,19 +193,30 @@ func (p *productsService) CreateOrders(userId string, ordersData []DataRequest) 
 	return orderResponses, nil
 }
 
-func (p *productsService) GetOrders(userId string, filter string) ([]Orders, error) {
-	db := p.db.DB()
+func (p *productsService) GetOrders(userId string, filter string, cursor string, limit int) ([]Orders, error) {
+	// BE-10: page the result with the existing created_at cursor pattern instead
+	// of returning every row unbounded.
+	if limit <= 0 {
+		limit = 20
+	}
+
+	db := p.db.DB().Preload("Product")
+
+	switch filter {
+	case "receiving":
+		db = db.Where("buyer_id = ?", userId)
+	case "sending":
+		db = db.Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId)
+	default:
+		db = db.Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId)
+	}
+
+	if cursor != "" {
+		db = db.Where("orders.created_at < ?", cursor)
+	}
 
 	var orders []Orders
-	var err error
-	if filter == "receiving" {
-		err = db.Preload("Product").Where("buyer_id = ?", userId).Find(&orders).Error
-	} else if filter == "sending" {
-		err = db.Preload("Product").Where("product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId).Find(&orders).Error
-	} else {
-		err = db.Preload("Product").Where("buyer_id = ? OR product_id IN (SELECT id FROM products WHERE store_id IN (SELECT id FROM stores WHERE owner_id = ?))", userId, userId).Find(&orders).Error
-	}
-	if err != nil {
+	if err := db.Order("orders.created_at desc").Limit(limit).Find(&orders).Error; err != nil {
 		return nil, err
 	}
 

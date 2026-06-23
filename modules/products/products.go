@@ -39,8 +39,9 @@ type (
 		// CreateOrders returns order_ids for given products
 		CreateOrders(userId string, orders []DataRequest) ([]OrderResponse, error)
 
-		// GetOrders returns all orders
-		GetOrders(userId string, filter string) ([]Orders, error)
+		// GetOrders returns a page of the caller's orders, newest first, using a
+		// created_at cursor (empty cursor starts from the newest).
+		GetOrders(userId string, filter string, cursor string, limit int) ([]Orders, error)
 
 		// SaveImage validates and saves an uploaded image to object storage under
 		// a server-generated key derived from keyPrefix.
