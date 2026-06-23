@@ -117,6 +117,20 @@ func runMigrations(conn *gorm.DB) error {
 			return err
 		}
 
+		// BE-13: ensure the users.wallet_address unique index is partial
+		// (`WHERE deleted_at IS NULL`) so a soft-deleted user can re-register the
+		// same wallet. AutoMigrate will not convert a pre-existing full unique
+		// index in place, so drop any non-partial variant and recreate it scoped
+		// to live rows. Idempotent.
+		if err := tx.Exec("DROP INDEX IF EXISTS idx_users_wallet_address").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(
+			"CREATE UNIQUE INDEX IF NOT EXISTS idx_users_wallet_address ON users (wallet_address) WHERE deleted_at IS NULL",
+		).Error; err != nil {
+			return fmt.Errorf("create partial unique index on users.wallet_address: %w", err)
+		}
+
 		// The Disputes model declares `order_id` as a uniqueIndex, but AutoMigrate
 		// will not upgrade a pre-existing non-unique index in place. The observer's
 		// `ON CONFLICT (order_id)` upsert needs the unique constraint. Create it

@@ -28,15 +28,21 @@ const (
 )
 
 // Users is the single source-of-truth model for the users table. The JSON tags
-// preserve the wire contract previously defined by the per-module copy
-// (BE-7).
+// preserve the wire contract previously defined by the per-module copy (BE-7).
+//
+// BE-13: soft-delete (gorm.Model's deleted_at) is kept deliberately for the
+// audit trail, but the wallet uniqueness is scoped to non-deleted rows via a
+// partial unique index (`WHERE deleted_at IS NULL`). A plain uniqueIndex spans
+// soft-deleted rows too, so a user who deleted their account could never
+// re-register the same wallet — the partial index allows re-registration while
+// still preventing two live accounts sharing a wallet.
 type Users struct {
 	gorm.Model
 	ID            uuid.UUID  `gorm:"primaryKey" json:"ID"`
 	FirstName     string     `json:"FirstName"`
 	LastName      string     `json:"LastName"`
 	Address       string     `json:"Address,omitempty"`
-	WalletAddress string     `gorm:"uniqueIndex;not null" json:"WalletAddress"`
+	WalletAddress string     `gorm:"not null;uniqueIndex:idx_users_wallet_address,where:deleted_at IS NULL" json:"WalletAddress"`
 	LastLoginAt   *time.Time `json:"LastLoginAt,omitempty"`
 }
 
