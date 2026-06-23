@@ -69,7 +69,7 @@ func (p *productsService) CreateProduct(userId string, product *Products) (strin
 	}
 
 	saved := p.load(uuid.FromStringOrNil(id))
-	go p.algolia.IndexProduct(toAlgoliaRecord(saved))
+	p.algolia.EnqueueIndex(toAlgoliaRecord(saved))
 
 	return id, nil
 }
@@ -81,7 +81,7 @@ func (p *productsService) UpdateProduct(userId string, id string, product *Produ
 	}
 
 	updated := p.load(uuid.FromStringOrNil(id))
-	go p.algolia.IndexProduct(toAlgoliaRecord(updated))
+	p.algolia.EnqueueIndex(toAlgoliaRecord(updated))
 
 	return nil
 }
@@ -92,7 +92,7 @@ func (p *productsService) DeleteProduct(userId string, id string) error {
 		return err
 	}
 
-	go p.algolia.DeleteProduct(id)
+	p.algolia.EnqueueDelete(id)
 
 	return nil
 }
