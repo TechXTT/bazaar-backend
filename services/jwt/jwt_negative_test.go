@@ -154,3 +154,56 @@ func TestValidateToken_TamperedSignature(t *testing.T) {
 		t.Fatal("expected tampered token to be rejected")
 	}
 }
+
+// TestGeneratedTokenClaims covers BE-16: minted tokens carry a unique jti, the
+// API audience, the bazaar issuer, an iat, and a ~1h expiry.
+func TestGeneratedTokenClaims(t *testing.T) {
+	svc, _ := newTestJwks(t)
+
+	t1, err := svc.GenerateToken("user-7")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	t2, err := svc.GenerateToken("user-7")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	parse := func(tok string) *gojwt.RegisteredClaims {
+		claims := &gojwt.RegisteredClaims{}
+		_, _, err := gojwt.NewParser().ParseUnverified(tok, claims)
+		if err != nil {
+			t.Fatalf("parse unverified: %v", err)
+		}
+		return claims
+	}
+
+	c1 := parse(t1)
+	c2 := parse(t2)
+
+	if c1.Subject != "user-7" {
+		t.Fatalf("subject: got %q want user-7", c1.Subject)
+	}
+	if len(c1.Audience) == 0 || c1.Audience[0] != tokenAudience {
+		t.Fatalf("audience: got %v want %q", c1.Audience, tokenAudience)
+	}
+	if c1.Issuer != tokenIssuer {
+		t.Fatalf("issuer: got %q want %q", c1.Issuer, tokenIssuer)
+	}
+	if c1.ID == "" {
+		t.Fatal("expected non-empty jti")
+	}
+	if c1.ID == c2.ID {
+		t.Fatal("jti must be unique per token")
+	}
+	if c1.IssuedAt == nil {
+		t.Fatal("expected iat")
+	}
+	if c1.ExpiresAt == nil {
+		t.Fatal("expected exp")
+	}
+	ttl := c1.ExpiresAt.Sub(c1.IssuedAt.Time)
+	if ttl != tokenTTL {
+		t.Fatalf("ttl: got %s want %s", ttl, tokenTTL)
+	}
+}
