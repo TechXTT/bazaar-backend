@@ -31,7 +31,7 @@ func (u *usersHandler) Nonce(w http.ResponseWriter, r *http.Request) {
 
 	nonce, err := u.svc.GetNonce(body.WalletAddress)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -54,7 +54,7 @@ func (u *usersHandler) Verify(w http.ResponseWriter, r *http.Request) {
 
 	token, user, err := u.svc.VerifySIWE(body.Message, body.Signature)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
+		httpjson.WriteAppError(w, http.StatusUnauthorized, err)
 		return
 	}
 
@@ -69,12 +69,12 @@ func (u *usersHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var body Users
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 
 	if err := u.svc.UpdateUser(userID, &body); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -85,7 +85,7 @@ func (u *usersHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserID(r)
 
 	if err := u.svc.DeleteUser(userID); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -97,7 +97,7 @@ func (u *usersHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := u.svc.GetMe(userID)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
+		httpjson.WriteAppError(w, http.StatusUnauthorized, err)
 		return
 	}
 
@@ -109,7 +109,7 @@ func (u *usersHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	token, err := u.svc.RefreshToken(userID)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusUnauthorized, err.Error())
+		httpjson.WriteAppError(w, http.StatusUnauthorized, err)
 		return
 	}
 

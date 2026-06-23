@@ -53,14 +53,14 @@ func NewProductsHandler(i *do.Injector) (Handler, error) {
 func (s *productsHandler) Gets(w http.ResponseWriter, r *http.Request) {
 	products, err := s.svc.GetProducts()
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(products); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 }
@@ -75,7 +75,7 @@ func (s *productsHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	product, err := s.svc.GetProduct(productId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -98,7 +98,7 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	// read from form data
 	file, _, err := r.FormFile("image")
 	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 	defer file.Close()
@@ -125,7 +125,7 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	id, err := s.svc.CreateProduct(userId, product)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -134,14 +134,14 @@ func (s *productsHandler) Create(w http.ResponseWriter, r *http.Request) {
 	keyPrefix := "products/" + r.FormValue("storeId") + "/" + id
 	imageURL, err := s.svc.SaveImage(file, keyPrefix)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 
 	product.ImageURL = imageURL
 
 	if err := s.svc.UpdateProduct(userId, id, product); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -161,12 +161,12 @@ func (s *productsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	product := &Products{}
 	if err := json.NewDecoder(r.Body).Decode(product); err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.svc.UpdateProduct(userId, productId, product); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -185,7 +185,7 @@ func (s *productsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.svc.DeleteProduct(userId, productId); err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -215,7 +215,7 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 
 	products, err := s.svc.GetProductsFromStore(storeId, cursor, limit)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -225,7 +225,7 @@ func (s *productsHandler) GetFromStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewEncoder(w).Encode(products); err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 }
@@ -236,13 +236,13 @@ func (s *productsHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	// body is data:  []Orders
 	orders := &OrderRequest{}
 	if err := json.NewDecoder(r.Body).Decode(orders); err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 
 	orderIds, err := s.svc.CreateOrders(userId, orders.Data)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (s *productsHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	orders, err := s.svc.GetOrders(userId, filter, cursor, limit)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -290,7 +290,7 @@ func (s *productsHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := s.svc.GetOrder(userId, orderId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -306,7 +306,7 @@ func (s *productsHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 	defer file.Close()
@@ -315,7 +315,7 @@ func (s *productsHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	// validates the content type and generates a uuid-based key under this prefix.
 	url, err := s.svc.SaveImage(file, "evidence")
 	if err != nil {
-		httpjson.WriteError(w, http.StatusBadRequest, err.Error())
+		httpjson.WriteAppError(w, http.StatusBadRequest, err)
 		return
 	}
 

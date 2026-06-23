@@ -34,7 +34,7 @@ func (d *disputesHandler) GetDisputes(w http.ResponseWriter, r *http.Request) {
 
 	disputes, err := d.svc.ListDisputes(userID)
 	if err != nil {
-		httpjson.WriteError(w, http.StatusInternalServerError, err.Error())
+		httpjson.WriteAppError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -53,7 +53,7 @@ func (d *disputesHandler) GetDispute(w http.ResponseWriter, r *http.Request) {
 
 	dispute, err := d.svc.GetDispute(userID, orderId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (d *disputesHandler) GetEvidence(w http.ResponseWriter, r *http.Request) {
 
 	evidence, err := d.svc.GetEvidence(userID, orderId)
 	if err != nil {
-		httpjson.WriteError(w, statusForError(err), err.Error())
+		httpjson.WriteAppError(w, statusForError(err), err)
 		return
 	}
 
